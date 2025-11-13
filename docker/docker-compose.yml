@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:6-alpine
+    container_name: redis
+    networks:
+      qkd_network:
+        # Assign a static IP for Redis
+        ipv4_address: 172.18.0.2
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  node-a:
+    build: .
+    container_name: node-a
+    volumes:
+      - ./node-a/.qkd:/root/.qkd
+    networks:
+      qkd_network:
+        # Assign a static IP for node-a
+        ipv4_address: 172.18.0.3
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9060/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  node-b:
+    build: .
+    container_name: node-b
+    volumes:
+      - ./node-b/.qkd:/root/.qkd
+    networks:
+      qkd_network:
+        # Assign a static IP for node-b
+        ipv4_address: 172.18.0.4
+    depends_on:
+      redis:
+        condition: service_healthy
+      node-a:
+        condition: service_healthy
+
+# Define the network and its subnet
+networks:
+  qkd_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.18.0.0/16

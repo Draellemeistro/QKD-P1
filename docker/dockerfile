@@ -1,0 +1,39 @@
+# Start from Ubuntu 20.04 with Java 11
+FROM eclipse-temurin:11-jdk-focal
+ENV DEBIAN_FRONTEND=noninteractive
+
+# --- FIX IS HERE ---
+# Install dependencies, now including 'screen' for runtime
+RUN apt-get update && apt-get install -y \
+    maven \
+    git \
+    libjson-c-dev \
+    curl \
+    jq \
+    make \
+    build-essential \
+    libssl-dev \
+    libcurl4-openssl-dev \
+    screen \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+# --- END FIX ---
+
+# Set the working directory
+WORKDIR /app
+
+# Copy *only* the source code directory into the image
+COPY ./qkd-net /app/qkd-net
+
+# 1. Build the Java microservices
+WORKDIR /app/qkd-net/kms
+RUN ./scripts/build
+
+# 2. Pre-build the C-based demo applications
+WORKDIR /app/qkd-net/applications/tls-kms-demo
+RUN make
+
+# 3. Set the default directory for the final command
+WORKDIR /app/qkd-net/kms
+
+# The main command to run the services
+CMD ["/bin/bash", "-c", "./scripts/run && echo 'Services started, tailing to keep container alive...' && tail -f /dev/null"]
