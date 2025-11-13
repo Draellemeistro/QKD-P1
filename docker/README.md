@@ -9,9 +9,17 @@ cd docker
 docker-compose up
 ```
 
+To access the nodes use:
+docker-compose exec node-a bash
+docker-compose exec node-b bash
+
+Refer to QKD-net readme for further instructions on how to use the QKD simulator. 
+
+
+
 ## Submodule Setup
 
-This project uses git submodules. After cloning the repository, you need to initialize and update the submodules:
+QKD-net is a git submodules. After cloning the repository, you need to initialize and update it:
 
 ```bash
 # 1. Initialize the submodule (reads the .gitmodules file)
@@ -21,8 +29,4 @@ git submodule init
 git submodule update
 ```
 
-Alternatively, you can clone with submodules in one step:
 
-```bash
-git clone --recurse-submodules https://github.com/Draellemeistro/QKD-P1
-```
