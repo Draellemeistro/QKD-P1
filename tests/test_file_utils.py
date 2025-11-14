@@ -36,3 +36,53 @@ def test_save_file_contents(tmp_path):
 
     # Assert that the saved content matches the expected content
     assert saved_content == test_content
+
+def test_split_file_into_chunks(tmp_path):
+    from src.app.file_utils import split_file_into_chunks
+
+    # Create a temporary binary file with known content
+    test_file = tmp_path / "test.bin"
+    test_content = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ"  # 26 bytes
+    test_file.write_bytes(test_content)
+
+    # Define chunk size
+    chunk_size = 10  # bytes
+
+    # Use the function to split the file into chunks
+    chunks = list(split_file_into_chunks(test_file, chunk_size))
+
+    # Assert that the correct number of chunks were created
+    assert len(chunks) == 3
+
+    # Assert the contents of each chunk
+    assert chunks[0]['data'] == b"ABCDEFGHIJ"
+    assert chunks[1]['data'] == b"KLMNOPQRST"
+    assert chunks[2]['data'] == b"UVWXYZ"
+
+
+def test_reassemble_file(tmp_path):
+    from src.app.file_utils import reassemble_file
+
+    # Create a temporary directory for chunks
+    chunk_dir = tmp_path / "chunks"
+    chunk_dir.mkdir()
+
+    # Create some chunk files
+    chunk_contents = [b"ABCDEFGHIJ", b"KLMNOPQRST", b"UVWXYZ"]
+    for i, content in enumerate(chunk_contents):
+        chunk_file = chunk_dir / f"chunk_{i}.bin"
+        chunk_file.write_bytes(content)
+
+    # Define the output file path
+    output_file = tmp_path / "reassembled.bin"
+
+    # Use the function to reassemble the file
+    reassemble_file(output_file, chunk_dir)
+
+    # Read the reassembled file
+    reassembled_content = output_file.read_bytes()
+
+    # Assert that the reassembled content matches the original content
+    expected_content = b"".join(chunk_contents)
+    assert reassembled_content == expected_content
+
