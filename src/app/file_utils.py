@@ -1,5 +1,7 @@
 import os
 import re
+import hashlib
+import mmap
 
 def load_file_contents(file_path):
     """Load and return the contents of a file."""
@@ -17,8 +19,6 @@ def split_file_into_chunks(file_path, chunk_size_bytes):
     Reads any file in binary mode and yields chunks of a specific byte size.
     """
     chunk_id = 0
-
-
     with open(file_path, 'rb') as file:
         while True:
 
@@ -37,38 +37,77 @@ def split_file_into_chunks(file_path, chunk_size_bytes):
 
 
 
-def reassemble_file(output_file_path, chunk_directory, chunk_prefix="chunk_"):
+def _get_chunk_id(filename):
     """
-    Reads binary chunks from a directory, sorts them by ID,
-    and stitches them back into a single file.
+    Extracts chunk_id from chunk
+    Returns -1 if no number is found.
     """
+    # Search for one or more digits
+    match = re.search(r'(\d+)', filename)
 
-    # Get all files in the directory
-    files = os.listdir(chunk_directory)
+    # Check if a match was found
+    if match:
+        # Return the first capturing group (the digits) as an integer
+        return int(match.group(1))
 
-    # Filter for files that look like our chunks
-    chunk_files = [f for f in files if f.startswith(chunk_prefix)]
+    # Return a default value if no number is found
+    return -1
 
-    if not chunk_files:
-        print("No chunks found")
-        return
 
-    # Sort files numerically by the ID embedded in the filename
-    # Use regex to extract the number from the filename
-    chunk_files.sort(key=lambda f: int(re.search(r'(\d+)', f).group()))
+def get_sorted_chunk_files(chunk_directory, chunk_prefix="chunk_"):
+    """
+    Reads a directory, filters for chunk files, and returns
+    a list of filenames sorted numerically by their embedded ID.
 
-    print(f"Found {len(chunk_files)} chunks. Reassembling...")
+    Returns an empty list if no files are found or the directory
+    doesn't exist.
+    """
+    try:
+        all_files = os.listdir(chunk_directory)
+    except FileNotFoundError:
+        # If the directory doesn't exist, return an empty list
+        return []
 
-    # Create the output file
+    # Filter for files that match our prefix
+    chunk_files = [f for f in all_files if f.startswith(chunk_prefix)]
+
+    # Sort the list using our helper function as the key
+    chunk_files.sort(key=_get_chunk_id)
+
+    # Return the sorted list
+    return chunk_files
+
+
+def reassemble_file(sorted_chunk_files, output_file_path, chunk_directory):
+    """ Reassembles sorted binary chunks into a single file. """
+
     with open(output_file_path, 'wb') as output_file:
-        for chunk_name in chunk_files:
-            chunk_path = os.path.join(chunk_directory, chunk_name)
-
-            # Open each chunk in Read Binary mode
-            with open(chunk_path, 'rb') as chunk_file:
-                chunk_data = chunk_file.read()
+        for chunk_file in sorted_chunk_files:
+            chunk_path = os.path.join(chunk_directory, chunk_file)
+            with open(chunk_path, 'rb') as cf:
+                chunk_data = cf.read()
                 output_file.write(chunk_data)
+    print(f"Reassembled file saved to {output_file_path}")
 
-            print(f"Stitched: {chunk_name}")
 
-    print(f"Reassembled file saved to: {output_file_path}")
+def hash_file(file_path, hash_algorithm):
+    """ Computes the hash of a file using memory-mapped file access. """
+    hash_func = hashlib.new(hash_algorithm)
+
+    with open(file_path, "rb") as f:
+
+        with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
+
+            while chunk := mm.read(65536): # Read in 64KB chunks
+                hash_func.update(chunk)
+
+    return hash_func.hexdigest()
+
+
+def validate_file_hash(file_path, expected_hash, hash_algorithm):
+    """ Validates the hash of a file against an expected hash value. """
+    computed_hash = hash_file(file_path, hash_algorithm)
+    return computed_hash == expected_hash
+
+
+
