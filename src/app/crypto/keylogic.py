@@ -1,4 +1,4 @@
-import encryption_module
+import src.app.crypto.encryption as encryption
 
 refresh_interval = 100  # Example refresh interval
 refresh_interval_from_size = 1024 * 1024  # Example size-based refresh interval (1 MB)
@@ -23,7 +23,7 @@ def encrypt_chunk(chunk, key):
     if chunk["size"] > refresh_interval_from_size:
         return  # this would be an error i think
 
-    return encryption_module.encrypt_AES256(chunk["data"], key)
+    return encryption.encrypt_AES256(chunk["data"], key)
 
 
 def encrypt_all_chunks(chunks, keys):
@@ -38,7 +38,7 @@ def encrypt_all_chunks(chunks, keys):
             encrypted_data_size = 0  # reset size counter after key refresh
 
         current_key = keys[key_index]
-        encrypted_data = encryption_module.encrypt_AES256(chunk["data"], current_key)
+        encrypted_data = encryption.encrypt_AES256(chunk["data"], current_key)
         if not encrypted_data:
             encrypted_chunks.append(
                 {
