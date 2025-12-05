@@ -125,4 +125,4 @@ def run_file_transfer(sender_id, destination_ip, destination_port, file_path):
 
 if __name__ == "__main__":
     # Example Usage
-    run_file_transfer("A", "127.0.0.1", 12345, "data/patient_records.txt")
+    run_file_transfer("A", "172.18.0.4", 12345, "data/patient_records.txt")

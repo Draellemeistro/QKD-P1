@@ -1,10 +1,8 @@
 # Start from Ubuntu 20.04 with Java 11
 FROM eclipse-temurin:11-jdk-focal
-FROM python:3.9-slim
 ENV DEBIAN_FRONTEND=noninteractive
 
-
-# Install dependencies, now including 'screen' for runtime
+# 1. Install Dependencies
 RUN apt-get update && apt-get install -y \
     maven \
     git \
@@ -16,25 +14,36 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     libcurl4-openssl-dev \
     screen \
+    python3 \
+    python3-pip \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# 2. Install Python Libraries
+RUN pip3 install requests python-dotenv cryptography
 
-# Set the working directory
 WORKDIR /app
 
-# Copy *only* the source code directory into the image
-COPY ./qkd-net /app/qkd-net
+# --- PATH FIX ---
+# Since context is Project Root:
+# 1. qkd-net is inside the 'docker' folder -> COPY docker/qkd-net ...
+# 2. src is in the root -> COPY src ...
+COPY ./docker/qkd-net /app/qkd-net
+COPY ./src /app/src
 
-# 1. Build the Java microservices
+# Set PYTHONPATH
+ENV PYTHONPATH="${PYTHONPATH}:/app"
+
+# 3. Build the Java microservices
 WORKDIR /app/qkd-net/kms
 RUN ./scripts/build
 
-# 2. Pre-build the C-based demo applications
+# 4. Pre-build the C-based demo applications
 WORKDIR /app/qkd-net/applications/tls-kms-demo
 RUN make
 
-# 3. Set the default directory for the final command
+# 5. Set the default directory
 WORKDIR /app/qkd-net/kms
 
-# The main command to run the services
-CMD ["/bin/bash", "-c", "./scripts/run && echo 'Services started, tailing to keep container alive...' && tail -f /dev/null"]
+# Default CMD: Start KMS and keep alive.
+# It does NOT start the python sender/receiver automatically.
+CMD ["/bin/bash", "-c", "./scripts/run && echo 'KMS Service started...' && tail -f /dev/null"]

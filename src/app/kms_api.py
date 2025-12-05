@@ -2,7 +2,9 @@ import requests
 from dotenv import load_dotenv
 import os
 
+"""
 load_dotenv()  # NOTE: ikke sikker på hvor .env burde ligge i forhold til app og nodes
+
 
 # Access variables
 kms_ip_env_var = os.getenv("KMS_URL")
@@ -12,7 +14,9 @@ if kms_ip_env_var:
 else:
     print("KMS_URL not found in environment variables.")
     kms_server_ip = "http://localhost:8095"  # Default value if not set
+"""
 
+kms_server_ip = os.getenv("KMS_URL", "http://localhost:8095")
 
 endpoints = {
     "get_key": kms_server_ip + "/api/getkey",

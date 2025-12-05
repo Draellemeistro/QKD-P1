@@ -7,7 +7,7 @@ from src.app.file_utils import FileStreamWriter
 
 # Configuration
 RECEIVER_ID = "B"
-LISTEN_IP = "0.0.0.0"
+LISTEN_IP = "172.18.0.4"
 LISTEN_PORT = 12345
 OUTPUT_FILE = "received_data/reconstructed_patient_data.txt"
 
