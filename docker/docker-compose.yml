@@ -15,15 +15,16 @@ services:
 
   node-a:
     build:
-      context: ..              # Build from Project Root
+      context: ..
       dockerfile: docker/Dockerfile
     container_name: node-a
     volumes:
       - ./node-a/.qkd:/root/.qkd
+      - ../data_alice:/app/qkd-net/kms/data  # Ensure this folder exists locally!
     environment:
       - KMS_URL=http://localhost:8095
       - TARGET_IP=172.18.0.4
-      - TARGET_PORT=12345
+      - TARGET_PORT=10446
     networks:
       qkd_network:
         ipv4_address: 172.18.0.3
@@ -33,21 +34,21 @@ services:
 
   node-b:
     build:
-      context: ..              # Build from Project Root
+      context: ..
       dockerfile: docker/Dockerfile
     container_name: node-b
     volumes:
       - ./node-b/.qkd:/root/.qkd
     environment:
       - KMS_URL=http://localhost:8095
+      - LISTEN_PORT=10446
+      - PEER_SITE_ID=A
     networks:
       qkd_network:
         ipv4_address: 172.18.0.4
     depends_on:
-      redis:
-        condition: service_healthy
-      node-a:
-        condition: service_healthy
+      - redis
+      - node-a
 
 networks:
   qkd_network:
