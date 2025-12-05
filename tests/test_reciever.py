@@ -1,6 +1,6 @@
 import pytest
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, mock_open
 from src.app.receiver import process_single_packet, run_reception_loop, start_server
 
 
