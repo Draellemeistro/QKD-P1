@@ -11,7 +11,7 @@ def test_load_file_contents(tmp_path):
     test_content = "Hello, world!"
     test_file.write_text(test_content)
 
-    # Use the function to load the file contents
+    # Use the function to load the file contentsa
     loaded_content = load_file_contents(test_file)
 
     # Assert that the loaded content matches the expected content
