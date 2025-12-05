@@ -3,6 +3,7 @@ FROM eclipse-temurin:11-jdk-focal
 ENV DEBIAN_FRONTEND=noninteractive
 
 # 1. Install Dependencies
+# Added 'libenet-dev' (Required for pyenet)
 RUN apt-get update && apt-get install -y \
     maven \
     git \
@@ -16,10 +17,12 @@ RUN apt-get update && apt-get install -y \
     screen \
     python3 \
     python3-pip \
+    libenet-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # 2. Install Python Libraries
-RUN pip3 install requests python-dotenv cryptography
+# Added 'pyenet'
+RUN pip3 install requests python-dotenv cryptography pyenet
 
 WORKDIR /app
 
@@ -30,7 +33,7 @@ WORKDIR /app
 COPY ./docker/qkd-net /app/qkd-net
 COPY ./src /app/src
 
-# Set PYTHONPATH
+# Set PYTHONPATH so python can find your modules
 ENV PYTHONPATH="${PYTHONPATH}:/app"
 
 # 3. Build the Java microservices
@@ -44,6 +47,5 @@ RUN make
 # 5. Set the default directory
 WORKDIR /app/qkd-net/kms
 
-# Default CMD: Start KMS and keep alive.
-# It does NOT start the python sender/receiver automatically.
+# Default CMD
 CMD ["/bin/bash", "-c", "./scripts/run && echo 'KMS Service started...' && tail -f /dev/null"]
