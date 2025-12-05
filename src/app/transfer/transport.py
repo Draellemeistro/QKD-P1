@@ -5,16 +5,28 @@ import time
 class Transport:
     def __init__(self, is_server=False, ip='0.0.0.0', port=0):
         self.is_server = is_server
-        addr = enet.Address(ip, port) if is_server else None
+
+        if is_server:
+            # FIX: pyenet requires the IP to be bytes, not a string.
+            # We encode it to utf-8 if it is a string.
+            ip_bytes = ip.encode('utf-8') if isinstance(ip, str) else ip
+            addr = enet.Address(ip_bytes, port)
+        else:
+            addr = None
 
         # Host: 10 peers, 2 channels (0: Reliable, 1: Unreliable)
+        # bind to the address if server, otherwise None allows outgoing connections
         self.host = enet.Host(addr, 10, 2, 0)
         self.peer = None
         print(f"[{'SERVER' if is_server else 'CLIENT'}] Transport initialized.")
 
     def connect(self, dest_ip, dest_port):
         print(f"Connecting to {dest_ip}:{dest_port}...")
-        self.peer = self.host.connect(enet.Address(dest_ip, dest_port), 2)
+
+        # FIX: Encode the destination IP to bytes as well
+        dest_ip_bytes = dest_ip.encode('utf-8') if isinstance(dest_ip, str) else dest_ip
+
+        self.peer = self.host.connect(enet.Address(dest_ip_bytes, dest_port), 2)
 
         # Block until connection succeeds or times out (5s)
         start = time.time()
@@ -26,7 +38,8 @@ class Transport:
         return False
 
     def send_reliable(self, data: bytes):
-        if not self.peer: raise ConnectionError("No peer connected")
+        if not self.peer:
+            raise ConnectionError("No peer connected")
         packet = enet.Packet(data, enet.PACKET_FLAG_RELIABLE)
         self.peer.send(0, packet)
 
