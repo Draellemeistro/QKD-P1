@@ -20,7 +20,8 @@ services:
     container_name: node-a
     volumes:
       - ./node-a/.qkd:/root/.qkd
-      - ../data_alice:/app/qkd-net/kms/data  # Ensure this folder exists locally!
+      - ../data_alice:/app/qkd-net/kms/data
+      - ../src:/app/src
     environment:
       - KMS_URL=http://localhost:8095
       - TARGET_IP=172.18.0.4
@@ -39,6 +40,7 @@ services:
     container_name: node-b
     volumes:
       - ./node-b/.qkd:/root/.qkd
+      - ../src:/app/src
     environment:
       - KMS_URL=http://localhost:8095
       - LISTEN_PORT=10446
