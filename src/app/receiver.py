@@ -6,7 +6,7 @@ from src.app.crypto import encryption
 from src.app.file_utils import FileStreamWriter
 
 # Configuration
-SENDER_ID = "B"
+SENDER_ID = "A"
 LISTEN_IP = "172.18.0.4"
 LISTEN_PORT = 12345
 OUTPUT_FILE = "received_data/reconstructed_patient_data.txt"
