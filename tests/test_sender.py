@@ -27,7 +27,7 @@ def test_process_single_packet_data(mock_get_key, mock_decrypt):
     }
 
     # Execute
-    finished = process_single_packet(packet, mock_writer, receiver_id="B")
+    finished = process_single_packet(packet, mock_writer, sender_id="B")
 
     # Assertions
     assert finished is False

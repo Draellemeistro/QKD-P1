@@ -6,7 +6,7 @@ from src.app.crypto import encryption
 from src.app.file_utils import FileStreamWriter
 
 # Configuration
-RECEIVER_ID = "B"
+SENDER_ID = "B"
 LISTEN_IP = "172.18.0.4"
 LISTEN_PORT = 12345
 OUTPUT_FILE = "received_data/reconstructed_patient_data.txt"
@@ -21,14 +21,14 @@ def start_server(ip, port):
     return transport
 
 
-def get_decryption_key(receiver_id, block_id, index):
+def get_decryption_key(sender_id, block_id, index):
     """
     Wrapper for KMS interaction (Side Effect: API Call).
     """
-    return get_key(receiver_id, block_id, index)
+    return get_key(sender_id, block_id, index)
 
 
-def process_single_packet(packet_dict, writer, receiver_id):
+def process_single_packet(packet_dict, writer, sender_id):
     """
     1. Checks termination.
     2. Fetches key.
@@ -47,7 +47,7 @@ def process_single_packet(packet_dict, writer, receiver_id):
     try:
         # 2. Fetch Key
         key_metadata = get_decryption_key(
-            receiver_id,
+            sender_id,
             packet_dict["key_block_id"],
             packet_dict["key_index"]
         )
@@ -104,7 +104,7 @@ def run_reception_loop(transport, output_file, receiver_id):
 def main():
     transport = start_server(LISTEN_IP, LISTEN_PORT)
     try:
-        run_reception_loop(transport, OUTPUT_FILE, RECEIVER_ID)
+        run_reception_loop(transport, OUTPUT_FILE, SENDER_ID)
         print("File transfer complete.")
     finally:
         transport.flush()
