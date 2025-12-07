@@ -24,7 +24,7 @@ def establish_connection(ip, port):
     return None
 
 
-def ensure_valid_key(current_key, bytes_used, limit, sender_id):
+def ensure_valid_key(current_key, bytes_used, limit, receiver_id):
     """
     Checks if the current key is valid or needs rotation.
     Returns: The active key (either the current one or a newly fetched one).
@@ -35,7 +35,7 @@ def ensure_valid_key(current_key, bytes_used, limit, sender_id):
     if needs_rotation:
         print(f"Fetching new key... (Previous used for {bytes_used} bytes)")
         #
-        return new_key(sender_id)
+        return new_key(receiver_id)
 
     return current_key
 
@@ -125,4 +125,4 @@ def run_file_transfer(sender_id, destination_ip, destination_port, file_path):
 
 if __name__ == "__main__":
     # Example Usage
-    run_file_transfer("A", "172.18.0.4", 12345, "data/patient_records.txt")
+    run_file_transfer("A", "172.18.0.4", 12345, "data/")

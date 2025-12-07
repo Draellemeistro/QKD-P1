@@ -24,7 +24,7 @@ endpoints = {
 }
 
 
-def new_key(sender):
+def new_key(receiver ):
     """
     REQUEST:
         Method : POST URL path : /api/newkey URL params: siteid=[alhpanumeric]
@@ -38,7 +38,7 @@ def new_key(sender):
     }
     """
 
-    r = requests.post(endpoints["new_key"], data={"siteid": str(sender)})
+    r = requests.post(endpoints["new_key"], params={"siteid": str(receiver)})
     r.raise_for_status()  # Raise an error for bad responses (4xx and 5xx)
 
     return r.json()
@@ -66,7 +66,7 @@ def get_key(receiver, block_id, index):
     kms_url = endpoints["get_key"]
     params = {"siteid": str(receiver), "index": str(index), "blockid": str(block_id)}
 
-    r = requests.post(kms_url, data=params)
+    r = requests.post(kms_url, params=params)
     r.raise_for_status()  # Raise an error for bad responses (4xx and 5xx)
 
     return r.json()
