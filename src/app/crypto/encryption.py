@@ -3,7 +3,7 @@ from cryptography.hazmat.backends import default_backend
 import secrets  # For secure random number generation
 import base64
 
-token_size = 32  # Size of the AES-256 key in bytes
+IV_size = 16  # IV needs to match AES block size in bytes
 
 
 def encrypt_AES256(plaintext, hex_key, mode="CBC"):
@@ -24,13 +24,14 @@ def derive_AES256_key(hex_key):
 
 def split_iv_ciphertext(b64_ciphertext):
     encrypted_data_bytes = base64.b64decode(b64_ciphertext)
-    iv = encrypted_data_bytes[:token_size]  # Extract the IV from the beginning
-    ciphertext = encrypted_data_bytes[token_size:]  # The rest is the ciphertext
+    #Use IV size instead of key size
+    iv = encrypted_data_bytes[:IV_size]  # Extract the IV from the beginning
+    ciphertext = encrypted_data_bytes[IV_size:]  # The rest is the ciphertext
     return iv, ciphertext
 
 
 def encrypt_AES256_CBC(plaintext, byte_key):
-    iv = secrets.token_bytes(token_size)  # Generate a secure random IV
+    iv = secrets.token_bytes(IV_size)  # Generate a secure random IV
     cipher = Cipher(algorithms.AES(byte_key), modes.CBC(iv), backend=default_backend())
     encryptor = cipher.encryptor()
 
