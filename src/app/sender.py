@@ -61,7 +61,7 @@ def send_chunk_packet(transport, chunk, key_data):
     transport.send_reliable(json_bytes)
 
 
-def run_file_transfer(sender_id, destination_ip, destination_port, file_path):
+def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
     """
     Main Orchestration Loop.
     """
@@ -86,7 +86,7 @@ def run_file_transfer(sender_id, destination_ip, destination_port, file_path):
                 current_key_data,
                 bytes_encrypted_with_current_key,
                 KEY_ROTATION_LIMIT,
-                sender_id
+                receiver_id
             )
 
             # If a new key was fetched, reset the counter
@@ -125,4 +125,4 @@ def run_file_transfer(sender_id, destination_ip, destination_port, file_path):
 
 if __name__ == "__main__":
     # Example Usage
-    run_file_transfer("A", "172.18.0.4", 12345, "data/patient_records.txt")
+    run_file_transfer("B", "172.18.0.4", 12345, "data/patient_records.txt")
