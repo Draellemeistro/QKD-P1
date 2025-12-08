@@ -1,7 +1,7 @@
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
-import secrets  # For secure random number generation
+import secrets
 import base64
 
 IV_size = 16  # IV needs to match AES block size in bytes

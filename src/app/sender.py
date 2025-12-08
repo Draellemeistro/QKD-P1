@@ -9,7 +9,7 @@ from src.app.file_utils import split_file_into_chunks
 from src.app.crypto import encryption
 
 # Configuration Constants
-# 64KB: Large enough for high throughput, small enough for smooth streaming
+# 64KB:
 CHUNK_SIZE = 64 * 1024
 KEY_ROTATION_LIMIT = 1024 * 1024 * 10  # Rotate key every 10 MB
 

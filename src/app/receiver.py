@@ -23,7 +23,7 @@ def start_server(ip, port):
 
 def get_decryption_key(sender_id, block_id, index):
     """
-    Wrapper for KMS interaction (Side Effect: API Call).
+    Wrapper for KMS interaction
     """
     return get_key(sender_id, block_id, index)
 
@@ -51,9 +51,8 @@ def process_single_packet(packet_dict, writer, sender_id):
             packet_dict["key_block_id"],
             packet_dict["key_index"]
         )
-
         # 3. Decrypt
-        #
+
         decrypted_str = encryption.decrypt_AES256(packet_dict["data"], key_metadata["hexKey"])
 
         # 4. Write to Stream
@@ -64,7 +63,7 @@ def process_single_packet(packet_dict, writer, sender_id):
             print(f"Processed chunk {chunk_id}...", end='\r')
 
     except Exception as e:
-        # In a real system, we might send a NACK (Negative Acknowledge) here
+        # Should send a NACK here
         print(f"\nError processing chunk {chunk_id}: {e}")
 
     return False
@@ -74,7 +73,7 @@ def run_reception_loop(transport, output_file, receiver_id):
     """
     Main Event Loop (Orchestration).
     """
-    # Open the file stream ONCE
+    # Open the file stream
     with FileStreamWriter(output_file) as writer:
         print(f"Ready to write to {output_file}")
 
@@ -86,6 +85,7 @@ def run_reception_loop(transport, output_file, receiver_id):
                 try:
                     # 2. Parse Protocol
                     packet_data = event.packet.data.decode('utf-8')
+                    #change to read header instead of json
                     packet_dict = json.loads(packet_data)
 
                     # 3. Execute Logic
