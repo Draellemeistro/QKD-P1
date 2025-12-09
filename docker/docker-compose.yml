@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:6-alpine
+    container_name: redis
+    networks:
+      qkd_network:
+        ipv4_address: 172.18.0.2
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  node-a:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: node-a
+    volumes:
+      - ./node-a/.qkd:/root/.qkd
+      - ../data_alice:/app/qkd-net/kms/data
+      - ../src:/app/src
+    environment:
+      - KMS_URL=http://localhost:8095
+      - TARGET_IP=172.18.0.4
+      - TARGET_PORT=10446
+    networks:
+      qkd_network:
+        ipv4_address: 172.18.0.3
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  node-b:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: node-b
+    volumes:
+      - ./node-b/.qkd:/root/.qkd
+      - ../src:/app/src
+    environment:
+      - KMS_URL=http://localhost:8095
+      - LISTEN_PORT=10446
+      - PEER_SITE_ID=A
+    networks:
+      qkd_network:
+        ipv4_address: 172.18.0.4
+    depends_on:
+      - redis
+      - node-a
+
+networks:
+  qkd_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.18.0.0/16

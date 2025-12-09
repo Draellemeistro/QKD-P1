@@ -1,0 +1,3 @@
+[submodule "docker/qkd-net"]
+	path = docker/qkd-net
+	url = https://github.com/Open-QKD-Network/qkd-net.git
