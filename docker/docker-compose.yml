@@ -55,7 +55,7 @@ services:
   directory-service:
     build:
       context: ..
-      dockerfile: docker/Dockerfile.directory  # Points to the new file
+      dockerfile: docker/Dockerfile.directory
     container_name: directory-service
     volumes:
       - ../src:/app/src

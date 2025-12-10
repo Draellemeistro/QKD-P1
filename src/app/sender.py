@@ -9,11 +9,14 @@ from src.app.transfer.transport import Transport
 from src.app.file_utils import split_file_into_chunks
 from src.app.crypto import encryption
 from src.app.transfer.network_utils import resolve_host
+from src.app.transfer.protocol import create_data_packet, create_termination_packet, encode_packet_with_headers
 
 # Configuration Constants
 # 64KB:
 CHUNK_SIZE = 64 * 1024
 KEY_ROTATION_LIMIT = 1024 * 1024 * 10  # Rotate key every 10 MB
+
+
 
 
 def establish_connection(ip, port):
@@ -48,19 +51,9 @@ def send_chunk_packet(transport, chunk, key_data):
     """
     # 1. Encrypt Payload
     encrypted_payload = encryption.encrypt_AES256(chunk["data"], key_data["hexKey"])
-
-    # 2. Format Packet
-    packet = {
-        "chunk_id": chunk["id"],
-        "key_block_id": key_data["blockId"],
-        "key_index": key_data["index"],
-        "data": encrypted_payload,
-        "is_last": False
-    }
-
-    # 3. Serialize & Send
-    json_bytes = json.dumps(packet).encode('utf-8')
-    transport.send_reliable(json_bytes)
+    # 2. Create Packet with headers
+    packet = create_data_packet(chunk["id"], key_data["blockId"], key_data["index"], encrypted_payload.encode('utf-8'))    # 3. Send Packet Reliably
+    transport.send_reliable(packet)
 
 
 def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
@@ -115,7 +108,7 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
 
     # 3. Termination
     print("\nSending termination signal...")
-    end_packet = json.dumps({"chunk_id": -1, "is_last": True}).encode('utf-8')
+    end_packet = create_termination_packet()
     transport.send_reliable(end_packet)
 
     # Ensure everything leaves the buffer
@@ -126,20 +119,19 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
 
 
 if __name__ == "__main__":
-    if __name__ == "__main__":
-        # 1. Parse Arguments
-        if len(sys.argv) > 1:
-            target_name = sys.argv[1]
-        else:
-            target_name = "bob"
+    # 1. Parse Arguments
+    if len(sys.argv) > 1:
+        target_name = sys.argv[1]
+    else:
+        target_name = "bob"
 
-        # 2. Resolve (One line!)
-        target_ip, target_port, peer_site_id = resolve_host(target_name)
+    # 2. Resolve
+    target_ip, target_port, peer_site_id = resolve_host(target_name)
 
-        print(f"Resolved '{target_name}':")
-        print(f"IP: {target_ip}")
-        print(f"Site ID: {peer_site_id}")
+    print(f"Resolved '{target_name}':")
+    print(f"IP: {target_ip}")
+    print(f"Site ID: {peer_site_id}")
 
-        run_file_transfer(peer_site_id, target_ip, target_port, "data/patient_records.txt")
+    run_file_transfer(peer_site_id, target_ip, target_port, "data/patient_records.txt")
 
 
