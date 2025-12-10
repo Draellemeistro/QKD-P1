@@ -1,12 +1,14 @@
 import json
 import time
 import os
+import sys
 
 # Updated imports to match your project structure
 from src.app.kms_api import new_key
 from src.app.transfer.transport import Transport
 from src.app.file_utils import split_file_into_chunks
 from src.app.crypto import encryption
+from src.app.transfer.network_utils import resolve_host
 
 # Configuration Constants
 # 64KB:
@@ -124,5 +126,20 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
 
 
 if __name__ == "__main__":
-    # Example Usage
-    run_file_transfer("B", "172.18.0.4", 12345, "data/patient_records.txt")
+    if __name__ == "__main__":
+        # 1. Parse Arguments
+        if len(sys.argv) > 1:
+            target_name = sys.argv[1]
+        else:
+            target_name = "bob"
+
+        # 2. Resolve (One line!)
+        target_ip, target_port, peer_site_id = resolve_host(target_name)
+
+        print(f"Resolved '{target_name}':")
+        print(f"IP: {target_ip}")
+        print(f"Site ID: {peer_site_id}")
+
+        run_file_transfer(peer_site_id, target_ip, target_port, "data/patient_records.txt")
+
+
