@@ -24,7 +24,27 @@ def check_auth(username, password):
 
 
 # ----- GET KEY -----
-@app.route("/get_key", methods=["GET"])
+@app.route(
+    "/connect", methods=["POST"]
+)  # Should be GET, probably, but need node id in env somewhere?
+def serve_connect():
+    data = request.json
+    if data.get("purpose") == "sender":
+        id = SENDER_NODE_ID
+    elif data.get("purpose") == "receiver":
+        id = RECEIVER_NODE_ID
+    else:
+        id = NODE_ID
+
+    return jsonify(
+        {
+            "node_id": id,
+        }
+    )
+
+
+# ----- GET KEY -----
+@app.route("/get_key", methods=["POST"])
 def serve_get_key():
     # Stand-in: returns a dummy key
     """
