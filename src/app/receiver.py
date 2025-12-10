@@ -50,7 +50,7 @@ def process_single_packet(packet_dict, writer, sender_id, key_cache):
 
         # Check if we need to fetch a new key
         if key_cache.get("id") != needed_key_id:
-            # print(f"Fetching new key (Block: {needed_key_id[0]}, Index: {needed_key_id[1]})...")
+            print(f"Fetching new key (Block: {needed_key_id[0]}, Index: {needed_key_id[1]})...")
             key_metadata = get_decryption_key(
                 sender_id,
                 packet_dict["key_block_id"],
