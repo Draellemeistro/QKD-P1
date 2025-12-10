@@ -63,6 +63,7 @@ services:
       - "5000:5000"
     networks:
       qkd_network:
+        ipv4_address: 172.18.0.10
 
 networks:
   qkd_network:
