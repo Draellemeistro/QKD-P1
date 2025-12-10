@@ -57,7 +57,7 @@ def process_single_packet(packet_dict, writer, sender_id):
         decrypted_str = encryption.decrypt_AES256(packet_dict["data"], key_metadata["hexKey"])
 
         # 4. Write to Stream
-        writer.append(decrypted_str.encode('utf-8'))
+        writer.append(decrypted_str)
 
         # Log progress (only every 10th chunk to reduce console spam)
         if chunk_id % 10 == 0:
