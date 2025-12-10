@@ -52,6 +52,18 @@ services:
       - redis
       - node-a
 
+  directory-service:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.directory  # Points to the new file
+    container_name: directory-service
+    volumes:
+      - ../src:/app/src
+    ports:
+      - "5000:5000"
+    networks:
+      qkd_network:
+
 networks:
   qkd_network:
     driver: bridge

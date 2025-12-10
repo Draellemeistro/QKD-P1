@@ -1,0 +1,11 @@
+# Use a lightweight Python image
+FROM python:3.9-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install dependencies once during build
+RUN pip install flask
+
+# The command to run when the container starts
+CMD ["python3", "src/app/directory_server.py"]
