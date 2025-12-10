@@ -9,7 +9,7 @@ from src.app.transfer.transport import Transport
 from src.app.file_utils import split_file_into_chunks
 from src.app.crypto import encryption
 from src.app.transfer.network_utils import resolve_host
-from src.app.transfer.protocol import create_data_packet, create_termination_packet, encode_packet_with_headers
+from src.app.transfer.protocol import create_data_packet, create_termination_packet
 
 # Configuration Constants
 # 64KB:
