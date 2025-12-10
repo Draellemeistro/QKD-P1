@@ -52,7 +52,7 @@ def decrypt_AES256(b64_ciphertext, hex_key, mode="CBC"):
     try:
         plaintext_bytes = unpad_data(padded_plaintext)
         # 3. Decode to string
-        return plaintext_bytes.decode
+        return plaintext_bytes
     except ValueError:
         return "[Decryption Error: Invalid Padding]"
 
