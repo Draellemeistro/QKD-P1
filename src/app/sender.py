@@ -52,7 +52,7 @@ def send_chunk_packet(transport, chunk, key_data):
     # 1. Encrypt Payload
     encrypted_payload = encryption.encrypt_AES256(chunk["data"], key_data["hexKey"])
     # 2. Create Packet with headers
-    packet = create_data_packet(chunk["id"], key_data["blockId"], key_data["index"], encrypted_payload.encode('utf-8'))    # 3. Send Packet Reliably
+    packet = create_data_packet(chunk["id"], key_data["blockId"], key_data["index"], encrypted_payload)    # 3. Send Packet Reliably
     transport.send_reliable(packet)
 
 

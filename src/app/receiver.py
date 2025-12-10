@@ -4,6 +4,7 @@ from src.app.kms_api import get_key
 from src.app.transfer.transport import Transport
 from src.app.crypto import encryption
 from src.app.file_utils import FileStreamWriter
+from src.app.transfer.protocol import decode_packet_with_headers
 
 # Configuration
 SENDER_ID = "A"
@@ -84,9 +85,16 @@ def run_reception_loop(transport, output_file, receiver_id):
             if event.type == enet.EVENT_TYPE_RECEIVE:
                 try:
                     # 2. Parse Protocol
-                    packet_data = event.packet.data.decode('utf-8')
-                    #change to read header instead of json
-                    packet_dict = json.loads(packet_data)
+                    headers, encrypted_data = decode_packet_with_headers(event.packet.data)
+
+                    # Convert to the dict format your processor expects
+                    packet_dict = {
+                        "chunk_id": headers.get("chunk_id", -1),
+                        "key_block_id": headers.get("key_block_id"),
+                        "key_index": headers.get("key_index"),
+                        "is_last": headers.get("is_last", False),
+                        "data": encrypted_data
+                    }
 
                     # 3. Execute Logic
                     finished = process_single_packet(packet_dict, writer, receiver_id)

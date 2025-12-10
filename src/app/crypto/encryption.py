@@ -13,10 +13,6 @@ def pad_data(data):
     Applies PKCS7 padding to the data to ensure it is a multiple of the block size (128 bits).
     Handles string-to-bytes conversion automatically.
     """
-    if isinstance(data, str):
-        data = data.encode('utf-8')
-
-    # AES always works on 128-bit blocks
     padder = padding.PKCS7(128).padder()
     return padder.update(data) + padder.finalize()
 
@@ -56,7 +52,7 @@ def decrypt_AES256(b64_ciphertext, hex_key, mode="CBC"):
     try:
         plaintext_bytes = unpad_data(padded_plaintext)
         # 3. Decode to string
-        return plaintext_bytes.decode("utf-8")
+        return plaintext_bytes.decode
     except ValueError:
         return "[Decryption Error: Invalid Padding]"
 
@@ -75,7 +71,7 @@ def encrypt_AES256(plaintext, hex_key):
 
     ciphertext = encryptor.update(padded_data) + encryptor.finalize()
 
-    return base64.b64encode(iv + ciphertext).decode("utf-8")
+    return base64.b64encode(iv + ciphertext)
 
 
 def decrypt_AES256_CBC(b64_ciphertext, byte_key):
