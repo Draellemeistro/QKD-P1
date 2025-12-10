@@ -1,3 +1,5 @@
+from typing import Tuple, Dict
+
 def encode_packet_with_headers(headers: dict, data: bytes) -> bytes:
     """Encodes metadata as headers followed by data."""
     header_parts = [f"{k}:{v}" for k, v in headers.items()]
@@ -5,8 +7,7 @@ def encode_packet_with_headers(headers: dict, data: bytes) -> bytes:
     return header_str.encode('utf-8') + data
 
 
-def decode_packet_with_headers(packet_data: bytes) -> tuple[dict, bytes]:
-    """Decodes packet with headers."""
+def decode_packet_with_headers(packet_data: bytes) -> Tuple[Dict, bytes]:
     try:
         header_end = packet_data.index(b'\n')
         header_bytes = packet_data[:header_end]
