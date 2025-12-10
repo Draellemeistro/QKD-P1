@@ -1,4 +1,3 @@
-import json
 import enet
 from src.app.kms_api import get_key
 from src.app.transfer.transport import Transport
@@ -29,7 +28,7 @@ def get_decryption_key(sender_id, block_id, index):
     return get_key(sender_id, block_id, index)
 
 
-def process_single_packet(packet_dict, writer, sender_id):
+def process_single_packet(packet_dict, writer, sender_id, key_cache):
     """
     1. Checks termination.
     2. Fetches key.
@@ -47,14 +46,24 @@ def process_single_packet(packet_dict, writer, sender_id):
 
     try:
         # 2. Fetch Key
-        key_metadata = get_decryption_key(
-            sender_id,
-            packet_dict["key_block_id"],
-            packet_dict["key_index"]
-        )
+        needed_key_id = (packet_dict["key_block_id"], packet_dict["key_index"])
+
+        # Check if we need to fetch a new key
+        if key_cache.get("id") != needed_key_id:
+            # print(f"Fetching new key (Block: {needed_key_id[0]}, Index: {needed_key_id[1]})...")
+            key_metadata = get_decryption_key(
+                sender_id,
+                packet_dict["key_block_id"],
+                packet_dict["key_index"]
+            )
+            # Update the cache
+            key_cache["id"] = needed_key_id
+            key_cache["data"] = key_metadata
+
+        current_key = key_cache["data"]
         # 3. Decrypt
 
-        decrypted_str = encryption.decrypt_AES256(packet_dict["data"], key_metadata["hexKey"])
+        decrypted_str = encryption.decrypt_AES256(packet_dict["data"], current_key["hexKey"])
 
         # 4. Write to Stream
         writer.append(decrypted_str)
@@ -74,6 +83,9 @@ def run_reception_loop(transport, output_file, receiver_id):
     """
     Main Event Loop (Orchestration).
     """
+    # Initialize Key Cache
+    key_cache = {"id": None, "data": None}
+
     # Open the file stream
     with FileStreamWriter(output_file) as writer:
         print(f"Ready to write to {output_file}")
@@ -97,13 +109,13 @@ def run_reception_loop(transport, output_file, receiver_id):
                     }
 
                     # 3. Execute Logic
-                    finished = process_single_packet(packet_dict, writer, receiver_id)
+                    finished = process_single_packet(packet_dict, writer, receiver_id, key_cache)
 
                     if finished:
                         break
 
-                except json.JSONDecodeError:
-                    print("Error: Received malformed JSON")
+                except (ValueError, UnicodeDecodeError) as e:
+                    print(f"Error: Received malformed packet: {e}")
 
             elif event.type == enet.EVENT_TYPE_CONNECT:
                 print(f"Client connected: {event.peer.address}")
