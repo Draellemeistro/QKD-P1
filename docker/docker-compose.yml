@@ -52,6 +52,19 @@ services:
       - redis
       - node-a
 
+  directory-service:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.directory
+    container_name: directory-service
+    volumes:
+      - ../src:/app/src
+    ports:
+      - "5000:5000"
+    networks:
+      qkd_network:
+        ipv4_address: 172.18.0.10
+
 networks:
   qkd_network:
     driver: bridge

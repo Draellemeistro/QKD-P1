@@ -1,9 +1,9 @@
-import json
 import enet
 from src.app.kms_api import get_key
 from src.app.transfer.transport import Transport
 from src.app.crypto import encryption
 from src.app.file_utils import FileStreamWriter
+from src.app.transfer.protocol import decode_packet_with_headers
 
 # Configuration
 SENDER_ID = "A"
@@ -28,7 +28,7 @@ def get_decryption_key(sender_id, block_id, index):
     return get_key(sender_id, block_id, index)
 
 
-def process_single_packet(packet_dict, writer, sender_id):
+def process_single_packet(packet_dict, writer, sender_id, key_cache):
     """
     1. Checks termination.
     2. Fetches key.
@@ -46,17 +46,27 @@ def process_single_packet(packet_dict, writer, sender_id):
 
     try:
         # 2. Fetch Key
-        key_metadata = get_decryption_key(
-            sender_id,
-            packet_dict["key_block_id"],
-            packet_dict["key_index"]
-        )
+        needed_key_id = (packet_dict["key_block_id"], packet_dict["key_index"])
+
+        # Check if we need to fetch a new key
+        if key_cache.get("id") != needed_key_id:
+            print(f"Fetching new key (Block: {needed_key_id[0]}, Index: {needed_key_id[1]})...")
+            key_metadata = get_decryption_key(
+                sender_id,
+                packet_dict["key_block_id"],
+                packet_dict["key_index"]
+            )
+            # Update the cache
+            key_cache["id"] = needed_key_id
+            key_cache["data"] = key_metadata
+
+        current_key = key_cache["data"]
         # 3. Decrypt
 
-        decrypted_str = encryption.decrypt_AES256(packet_dict["data"], key_metadata["hexKey"])
+        decrypted_str = encryption.decrypt_AES256(packet_dict["data"], current_key["hexKey"])
 
         # 4. Write to Stream
-        writer.append(decrypted_str.encode('utf-8'))
+        writer.append(decrypted_str)
 
         # Log progress (only every 10th chunk to reduce console spam)
         if chunk_id % 10 == 0:
@@ -73,6 +83,9 @@ def run_reception_loop(transport, output_file, receiver_id):
     """
     Main Event Loop (Orchestration).
     """
+    # Initialize Key Cache
+    key_cache = {"id": None, "data": None}
+
     # Open the file stream
     with FileStreamWriter(output_file) as writer:
         print(f"Ready to write to {output_file}")
@@ -84,18 +97,25 @@ def run_reception_loop(transport, output_file, receiver_id):
             if event.type == enet.EVENT_TYPE_RECEIVE:
                 try:
                     # 2. Parse Protocol
-                    packet_data = event.packet.data.decode('utf-8')
-                    #change to read header instead of json
-                    packet_dict = json.loads(packet_data)
+                    headers, encrypted_data = decode_packet_with_headers(event.packet.data)
+
+                    # Convert to the dict format your processor expects
+                    packet_dict = {
+                        "chunk_id": headers.get("chunk_id", -1),
+                        "key_block_id": headers.get("key_block_id"),
+                        "key_index": headers.get("key_index"),
+                        "is_last": headers.get("is_last", False),
+                        "data": encrypted_data
+                    }
 
                     # 3. Execute Logic
-                    finished = process_single_packet(packet_dict, writer, receiver_id)
+                    finished = process_single_packet(packet_dict, writer, receiver_id, key_cache)
 
                     if finished:
                         break
 
-                except json.JSONDecodeError:
-                    print("Error: Received malformed JSON")
+                except (ValueError, UnicodeDecodeError) as e:
+                    print(f"Error: Received malformed packet: {e}")
 
             elif event.type == enet.EVENT_TYPE_CONNECT:
                 print(f"Client connected: {event.peer.address}")
