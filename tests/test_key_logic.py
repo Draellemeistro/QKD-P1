@@ -1,3 +1,4 @@
+import pytest
 from unittest.mock import patch
 from src.app.crypto.keylogic import (
     refresh_key_block,
@@ -9,7 +10,7 @@ import src.app.crypto.encryption as encryption
 
 
 def test_refresh_key_block():
-    pass
+    pytest.skip("Test not yet implemented")
     # assert refresh_key_block(0, 100) is True
     # assert refresh_key_block(100, 100) is True
     # assert refresh_key_block(150, 100) is False

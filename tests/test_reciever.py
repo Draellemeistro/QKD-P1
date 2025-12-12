@@ -3,8 +3,10 @@ import json
 from unittest.mock import MagicMock, patch, mock_open
 from src.app.receiver import process_single_packet, run_reception_loop, start_server
 
+pytest.importorskip("enet")
 
 # --- 1. Pure Logic Tests (No Network Needed) ---
+
 
 @patch("src.app.receiver.encryption.decrypt_AES256")
 @patch("src.app.receiver.get_decryption_key")
@@ -23,7 +25,7 @@ def test_process_single_packet_data(mock_get_key, mock_decrypt):
         "key_block_id": "b1",
         "key_index": 0,
         "data": "encrypted_blob",
-        "is_last": False
+        "is_last": False,
     }
 
     # Execute
@@ -53,6 +55,7 @@ def test_process_single_packet_termination():
 
 
 # --- 2. Integration / Loop Tests ---
+
 
 @patch("src.app.receiver.FileStreamWriter")
 @patch("src.app.receiver.process_single_packet")
@@ -102,3 +105,4 @@ def test_start_server(mock_transport_cls):
     start_server("127.0.0.1", 9999)
 
     mock_transport_cls.assert_called_with(is_server=True, ip="127.0.0.1", port=9999)
+
