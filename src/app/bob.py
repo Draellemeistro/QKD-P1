@@ -1,69 +1,26 @@
 import json
 import time
-import os
-import requests
 from src.app.transfer.transport import Transport
 from src.app.crypto import encryption
-from src.app.file_utils import FileStreamWriter, split_file_into_chunks
+from src.app.file_utils import split_file_into_chunks
+from src.app.end_user_utils import (
+    authenticate,
+    request_new_key,
+    connect_to_node,
+)
 
 # ----- BOB = SENDER ------
 
 # Configuration
-receiver_id = "B"
-destination_ip = "172.18.0.4"
-destination_port = 12345
-file_path = "data/patient_records.txt"
+import os
+DESTINATION_IP = os.getenv("DESTINATION_IP", "172.18.0.4")
+DESTINATION_PORT = int(os.getenv("DESTINATION_PORT", "12345"))
+FILE_PATH = os.getenv("FILE_PATH", "data/patient_records.txt")
 
 # QKD Node Interaction
+NODE_ID = None
 NODE_RECEIVER_ID = "B"
 NODE_SENDER_ID = "A"
-NODE_API_URL = f"http://{os.getenv('NODE_HOST', 'localhost')}:{os.getenv('NODE_PORT', '8000')}"  # øøøh, det var autocomplete
-
-
-def new_key():
-    r = requests.get(f"{NODE_API_URL}/new_key")
-    r.raise_for_status()
-    return r.json()
-
-
-def get_key(block_id, index):
-    params = {"sender_id": NODE_SENDER_ID, "block_id": block_id, "index": index}
-    r = requests.get(f"{NODE_API_URL}/get_key", params=params)
-    r.raise_for_status()
-    return r.json()
-
-
-def authenticate():
-    params = dummy_authenticate()
-    r = requests.post(f"{NODE_API_URL}/authenticate", data=params)
-    r.raise_for_status()
-    if r.json().get("status") == "success":
-        return True
-    elif r.json().get("message") == "Authenticated":
-        return True
-    else:
-        return r.json()
-
-
-def dummy_authenticate():
-    return {"username": "user", "password": "pass"}
-
-
-def connect_to_node():
-    r = requests.get(f"{NODE_API_URL}/connect", params={"purpose": "sender"})
-    r.raise_for_status()
-    NODE_ID = r.json()["node_id"]
-
-    authenticated = authenticate()
-    if authenticated is True:
-        print(f"Authenticated with node as {NODE_ID}")
-        return NODE_ID
-    elif authenticated is False:
-        print("Authentication failed.")
-        return None
-    else:
-        print(f"Authentication response: {authenticated}")
-        return None
 
 
 # Configuration Constants
@@ -91,8 +48,7 @@ def ensure_valid_key(current_key, bytes_used, limit, receiver_id):
 
     if needs_rotation:
         print(f"Fetching new key... (Previous used for {bytes_used} bytes)")
-        #
-        return new_key()
+        return request_new_key(receiver_id=receiver_id)
 
     return current_key
 
@@ -178,12 +134,26 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
 
     duration = time.time() - start_time
     print(f"Transfer complete. {total_bytes / 1024 / 1024:.2f} MB in {duration:.2f}s")
+    return
+
+
+def main():
+    # Example Usage
+    node_id = connect_to_node("sender")
+    if not node_id:
+        print("Failed to connect to QKD node.")
+
+    auth_check = authenticate()
+    if auth_check:
+        if node_id != NODE_SENDER_ID:
+            print(
+                f"Error: Connected as wrong node ID {node_id}, expected {NODE_SENDER_ID}"
+            )
+        else:
+            run_file_transfer(
+                NODE_RECEIVER_ID, DESTINATION_IP, DESTINATION_PORT, FILE_PATH
+            )
 
 
 if __name__ == "__main__":
-    # Example Usage
-    NODE_ID = connect_to_node()
-    if not NODE_ID:
-        print("Failed to connect to QKD node. Exiting.")
-
-    run_file_transfer("B", "172.18.0.4", 12345, "data/patient_records.txt")
+    main()

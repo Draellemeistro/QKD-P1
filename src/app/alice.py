@@ -1,31 +1,26 @@
-import os
-import requests
 import json
 import enet
 from src.app.transfer.transport import Transport
 from src.app.crypto import encryption
 from src.app.file_utils import FileStreamWriter
+from src.app.end_user_utils import (
+    authenticate,
+    request_get_key,
+    connect_to_node,
+)
 
 # ----- ALICE = RECEIVER ------
 
 # Configuration
 NODE_SENDER_ID = "A"
 NODE_RECEIVER_ID = "B"
-NODE_LISTEN_IP = "172.18.0.4"
-NODE_LISTEN_PORT = 12345
+import os
+NODE_LISTEN_IP = os.getenv("NODE_LISTEN_IP", "172.18.0.4")
+NODE_LISTEN_PORT = int(os.getenv("NODE_LISTEN_PORT", "12345"))
 OUTPUT_FILE = "received_data/reconstructed_patient_data.txt"
 
 ALICE_IP = NODE_LISTEN_IP
 ALICE_PORT = NODE_LISTEN_PORT
-
-NODE_API_URL = f"http://{os.getenv('NODE_HOST', 'localhost')}:{os.getenv('NODE_PORT', '8000')}"  # øøøh, det var autocomplete
-
-
-def get_key(block_id, index):
-    params = {"sender_id": NODE_SENDER_ID, "block_id": block_id, "index": index}
-    r = requests.get(f"{NODE_API_URL}/get_key", params=params)
-    r.raise_for_status()
-    return r.json()
 
 
 def start_server(ip, port):
@@ -39,9 +34,10 @@ def start_server(ip, port):
 
 def get_decryption_key(block_id, index):
     """
-    Wrapper for KMS interaction
+    Wrapper for KMS interaction via node server.
+    Provide sender_id so the server can fetch the correct key.
     """
-    return get_key(block_id, index)
+    return request_get_key(block_id, index, sender_id=NODE_SENDER_ID)
 
 
 def process_single_packet(packet_dict, writer, sender_id):
@@ -118,12 +114,20 @@ def run_reception_loop(transport, output_file, receiver_id):
 
 
 def main():
-    transport = start_server(ALICE_IP, ALICE_PORT)
-    try:
-        run_reception_loop(transport, OUTPUT_FILE, NODE_SENDER_ID)
-        print("File transfer complete.")
-    finally:
-        transport.flush()
+    node_id = connect_to_node("receiver")
+    auth_check = authenticate()
+    if auth_check:
+        if node_id != NODE_RECEIVER_ID:
+            print(
+                f"Error: Connected as wrong node ID {node_id}, expected {NODE_RECEIVER_ID}"
+            )
+        else:
+            transport = start_server(ALICE_IP, ALICE_PORT)
+            try:
+                run_reception_loop(transport, OUTPUT_FILE, NODE_SENDER_ID)
+                print("File transfer complete.")
+            finally:
+                transport.flush()
 
 
 if __name__ == "__main__":

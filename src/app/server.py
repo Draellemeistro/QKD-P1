@@ -1,19 +1,18 @@
 from flask import Flask, request, jsonify
-from kms_api import get_key, new_key
-import receiver
-import sender
+from src.app.kms_api import get_key, new_key
+import os
 
 app = Flask(__name__)
 
 SERVER_PORT = 8000
 SERVER_IP = ""  # Unused in this context
 
-RECEIVER_NODE_ID = "A"
-SENDER_NODE_ID = "B"
-NODE_ID = RECEIVER_NODE_ID  # IDK, midlertidig værdi
+RECEIVER_NODE_ID = os.getenv("NODE_RECEIVER_ID", "A")
+SENDER_NODE_ID = os.getenv("NODE_SENDER_ID", "B")
+NODE_ID = os.getenv("NODE_ID", RECEIVER_NODE_ID)
 
-NODE_LISTEN_IP = "172.18.0.4"
-NODE_LISTEN_PORT = 12345
+NODE_LISTEN_IP = os.getenv("NODE_LISTEN_IP", "172.18.0.4")
+NODE_LISTEN_PORT = int(os.getenv("NODE_LISTEN_PORT", "12345"))
 
 # Simple auth (replace with real logic)
 USERS = {"user": "pass"}
@@ -71,7 +70,9 @@ def serve_get_key():
     else:
         index = 0
 
-    return receiver.get_decryption_key(id, block_id, index)
+    return get_key(
+        id, block_id, index
+    )  # same as receiver.get_decryption_key(id, block_id, index)
 
 
 # ----- NEW KEY -----
@@ -89,7 +90,7 @@ def serve_auth():
     return jsonify({"message": "Authenticated"})
 
 
-# ----- REQUEST FILE -----
+# ----- REQUEST FILE ----- #NOT_IMPLEMENTED
 @app.route("/request_file", methods=["POST"])
 def serve_request_file():
     data = request.json
