@@ -1,24 +1,30 @@
 from flask import Flask, request, jsonify
+from typing import Optional
 from src.app.kms_api import get_key, new_key
 import os
 
-app = Flask(__name__)
-
+# Constants
 SERVER_PORT = 8000
-SERVER_IP = ""  # Unused in this context
-
-RECEIVER_NODE_ID = os.getenv("NODE_RECEIVER_ID", "A")
-SENDER_NODE_ID = os.getenv("NODE_SENDER_ID", "B")
-NODE_ID = os.getenv("NODE_ID", RECEIVER_NODE_ID)
-
-NODE_LISTEN_IP = os.getenv("NODE_LISTEN_IP", "172.18.0.4")
-NODE_LISTEN_PORT = int(os.getenv("NODE_LISTEN_PORT", "12345"))
-
-# Simple auth (replace with real logic)
+DEFAULT_RECEIVER_ID = "A"
+DEFAULT_SENDER_ID = "B"
+DEFAULT_NODE_LISTEN_IP = "172.18.0.4"
+DEFAULT_NODE_LISTEN_PORT = 12345
 USERS = {"user": "pass"}
 
+# Environment variables
+# TODO: use dotenv, and check if vars exist
+RECEIVER_NODE_ID = os.getenv("NODE_RECEIVER_ID", DEFAULT_RECEIVER_ID)
+SENDER_NODE_ID = os.getenv("NODE_SENDER_ID", DEFAULT_SENDER_ID)
+NODE_ID = os.getenv("NODE_ID", RECEIVER_NODE_ID)
+NODE_LISTEN_IP = os.getenv("NODE_LISTEN_IP", DEFAULT_NODE_LISTEN_IP)
+NODE_LISTEN_PORT = int(os.getenv("NODE_LISTEN_PORT", str(DEFAULT_NODE_LISTEN_PORT)))
 
-def check_auth(username, password):
+app = Flask(__name__)
+
+
+def check_auth(username: Optional[str], password: Optional[str]) -> bool:
+    if username is None or password is None:
+        return False
     return USERS.get(username) == password
 
 
@@ -27,19 +33,15 @@ def check_auth(username, password):
     "/connect", methods=["POST"]
 )  # Should be GET, probably, but need node id in env somewhere?
 def serve_connect():
-    data = request.json
-    if data.get("purpose") == "sender":
-        id = SENDER_NODE_ID
-    elif data.get("purpose") == "receiver":
-        id = RECEIVER_NODE_ID
+    data = request.json or {}
+    purpose = data.get("purpose")
+    if purpose == "sender":
+        node_id = SENDER_NODE_ID
+    elif purpose == "receiver":
+        node_id = RECEIVER_NODE_ID
     else:
-        id = NODE_ID
-
-    return jsonify(
-        {
-            "node_id": id,
-        }
-    )
+        node_id = NODE_ID
+    return jsonify({"node_id": node_id})
 
 
 # ----- GET KEY -----
@@ -54,25 +56,11 @@ def serve_get_key():
         "key_index": "0"
     }
     """
-    data = request.json
-    if data.get("sender_id"):
-        id = data["sender_id"]
-    else:
-        id = SENDER_NODE_ID
-
-    if data.get("key_block_id"):
-        block_id = data["key_block_id"]
-    else:
-        block_id = "stand"
-
-    if data.get("key_index"):
-        index = data["key_index"]
-    else:
-        index = 0
-
-    return get_key(
-        id, block_id, index
-    )  # same as receiver.get_decryption_key(id, block_id, index)
+    data = request.json or {}
+    id = data.get("sender_id", SENDER_NODE_ID)
+    block_id = data.get("key_block_id", "stand")
+    index = data.get("key_index", 0)
+    return get_key(id, block_id, index)
 
 
 # ----- NEW KEY -----
@@ -84,8 +72,8 @@ def serve_new_key():
 #  ----- AUTH -----
 @app.route("/auth", methods=["POST"])
 def serve_auth():
-    data = request.json
-    if not data or not check_auth(data.get("username"), data.get("password")):
+    data = request.json or {}
+    if not check_auth(data.get("username"), data.get("password")):
         return jsonify({"error": "Unauthorized"}), 401
     return jsonify({"message": "Authenticated"})
 
@@ -93,7 +81,7 @@ def serve_auth():
 # ----- REQUEST FILE ----- #NOT_IMPLEMENTED
 @app.route("/request_file", methods=["POST"])
 def serve_request_file():
-    data = request.json
+    data = request.json or {}
     file_path = data.get("file_path")
 
     # Stand-in: returns a dummy file content
