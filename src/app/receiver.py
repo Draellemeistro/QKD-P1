@@ -6,9 +6,9 @@ from src.app.file_utils import FileStreamWriter
 from src.app.transfer.protocol import decode_packet_with_headers
 
 # Configuration
-SENDER_ID = "A"
-LISTEN_IP = "172.18.0.4"
-LISTEN_PORT = 12345
+SENDER_ID = os.getenv("SENDER_ID", "A")
+LISTEN_IP = os.getenv("LISTEN_IP", "0.0.0.0")
+LISTEN_PORT = int(os.getenv("LISTEN_PORT", 12345))
 OUTPUT_FILE = "received_data/reconstructed_patient_data.txt"
 
 def start_server(ip, port):

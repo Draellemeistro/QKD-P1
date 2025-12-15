@@ -3,8 +3,7 @@ import sys
 import requests
 
 # Defaults to localhost, but can be overridden by Docker env vars
-DIRECTORY_URL = "http://172.18.0.10:5000"
-
+DIRECTORY_URL = os.getenv("DIRECTORY_SERVICE_URL", "http://172.18.0.10:5000")
 
 def resolve_host(hostname):
     """
