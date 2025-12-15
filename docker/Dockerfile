@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y \
 
 # 2. Install Python Libraries
 # Added 'pyenet'
-RUN pip3 install requests python-dotenv cryptography pyenet
+RUN pip3 install requests python-dotenv cryptography pyenet flask
 
 WORKDIR /app
 
@@ -48,4 +48,4 @@ RUN make
 WORKDIR /app/qkd-net/kms
 
 # Default CMD
-CMD ["/bin/bash", "-c", "./scripts/run && echo 'KMS Service started...' && tail -f /dev/null"]
+CMD ["/bin/bash", "-c", "python3 -m src.app.kms_proxy & ./scripts/run && echo 'KMS Service started...' && tail -f /dev/null"]

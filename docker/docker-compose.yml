@@ -36,7 +36,7 @@ services:
     # COMMAND: Run the Proxy in background (&) then keep the container alive (or run QKD stack)
     # Adjust '/start.sh' to whatever your original Dockerfile CMD was.
     # If you don't have a start script, use: sh -c "python src/app/kms_proxy.py & tail -f /dev/null"
-    command: sh -c "python src/app/kms_proxy.py & /start.sh"
+    command: sh -c "python src/app/kms_proxy.py"
     volumes:
       - ./node-a/.qkd:/root/.qkd
       - ../src:/app/src
