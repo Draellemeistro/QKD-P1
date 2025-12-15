@@ -1,9 +1,5 @@
-import json
 import time
-import os
 import sys
-
-# Updated imports to match your project structure
 from src.app.kms_api import new_key
 from src.app.transfer.transport import Transport
 from src.app.file_utils import split_file_into_chunks

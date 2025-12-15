@@ -11,7 +11,6 @@ LISTEN_IP = "172.18.0.4"
 LISTEN_PORT = 12345
 OUTPUT_FILE = "received_data/reconstructed_patient_data.txt"
 
-
 def start_server(ip, port):
     """
     Initializes the transport layer (Side Effect: Network IO).

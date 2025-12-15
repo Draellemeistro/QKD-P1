@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+  # --- INFRASTRUCTURE (Redis & Directory) ---
   redis:
     image: redis:6-alpine
     container_name: redis
@@ -13,17 +14,34 @@ services:
       timeout: 3s
       retries: 5
 
+  directory-service:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.directory
+    container_name: directory-service
+    volumes:
+      - ../src:/app/src
+    ports:
+      - "5000:5000"
+    networks:
+      qkd_network:
+        ipv4_address: 172.18.0.10
+
+  # --- QKD NODES (Running Stack + Proxy) ---
   node-a:
     build:
       context: ..
       dockerfile: docker/Dockerfile
     container_name: node-a
+    # COMMAND: Run the Proxy in background (&) then keep the container alive (or run QKD stack)
+    # Adjust '/start.sh' to whatever your original Dockerfile CMD was.
+    # If you don't have a start script, use: sh -c "python src/app/kms_proxy.py & tail -f /dev/null"
+    command: sh -c "python src/app/kms_proxy.py & /start.sh"
     volumes:
       - ./node-a/.qkd:/root/.qkd
-      - ../data_alice:/app/qkd-net/kms/data
       - ../src:/app/src
     environment:
-      - KMS_URL=http://localhost:8095
+      - KMS_URL=http://localhost:8095  # Internal KMS
       - TARGET_IP=172.18.0.4
       - TARGET_PORT=10446
     networks:
@@ -38,11 +56,12 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     container_name: node-b
+    command: sh -c "python src/app/kms_proxy.py & /start.sh"
     volumes:
       - ./node-b/.qkd:/root/.qkd
       - ../src:/app/src
     environment:
-      - KMS_URL=http://localhost:8095
+      - KMS_URL=http://localhost:8095 # Internal KMS
       - LISTEN_PORT=10446
       - PEER_SITE_ID=A
     networks:
@@ -52,18 +71,45 @@ services:
       - redis
       - node-a
 
-  directory-service:
+  # --- USER APPLICATIONS (The New Part) ---
+
+  # Sender App (Talks to Node A Proxy)
+  app-sender:
     build:
       context: ..
-      dockerfile: docker/Dockerfile.directory
-    container_name: directory-service
+      dockerfile: docker/Dockerfile
+    container_name: app-sender
     volumes:
       - ../src:/app/src
-    ports:
-      - "5000:5000"
+      - ../data:/app/data # Assuming you have data here
+    environment:
+      # THE TRICK: Point KMS_URL to Node A's Proxy
+      - KMS_URL=http://node-a:5000
+    command: tail -f /dev/null # Keep alive so you can exec into it
     networks:
       qkd_network:
-        ipv4_address: 172.18.0.10
+        ipv4_address: 172.18.0.20
+    depends_on:
+      - node-a
+
+  # Receiver App (Talks to Node B Proxy)
+  app-receiver:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: app-receiver
+    volumes:
+      - ../src:/app/src
+      - ../received_data:/app/received_data
+    environment:
+      # THE TRICK: Point KMS_URL to Node B's Proxy
+      - KMS_URL=http://node-b:5000
+    command: tail -f /dev/null # Keep alive
+    networks:
+      qkd_network:
+        ipv4_address: 172.18.0.21
+    depends_on:
+      - node-b
 
 networks:
   qkd_network:
