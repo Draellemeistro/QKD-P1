@@ -1,7 +1,7 @@
 import enet
 from src.app.kms_api import get_key
 from src.app.transfer.transport import Transport
-from src.app.crypto import encryption
+from src.crypto import encryption
 from src.app.file_utils import FileStreamWriter
 from src.app.transfer.protocol import decode_packet_with_headers
 
@@ -50,11 +50,11 @@ def process_single_packet(packet_dict, writer, sender_id, key_cache):
 
         # Check if we need to fetch a new key
         if key_cache.get("id") != needed_key_id:
-            print(f"Fetching new key (Block: {needed_key_id[0]}, Index: {needed_key_id[1]})...")
+            print(
+                f"Fetching new key (Block: {needed_key_id[0]}, Index: {needed_key_id[1]})..."
+            )
             key_metadata = get_decryption_key(
-                sender_id,
-                packet_dict["key_block_id"],
-                packet_dict["key_index"]
+                sender_id, packet_dict["key_block_id"], packet_dict["key_index"]
             )
             # Update the cache
             key_cache["id"] = needed_key_id
@@ -63,14 +63,16 @@ def process_single_packet(packet_dict, writer, sender_id, key_cache):
         current_key = key_cache["data"]
         # 3. Decrypt
 
-        decrypted_str = encryption.decrypt_AES256(packet_dict["data"], current_key["hexKey"])
+        decrypted_str = encryption.decrypt_AES256(
+            packet_dict["data"], current_key["hexKey"]
+        )
 
         # 4. Write to Stream
         writer.append(decrypted_str)
 
         # Log progress (only every 10th chunk to reduce console spam)
         if chunk_id % 10 == 0:
-            print(f"Processed chunk {chunk_id}...", end='\r')
+            print(f"Processed chunk {chunk_id}...", end="\r")
 
     except Exception as e:
         # Should send a NACK here
@@ -97,7 +99,9 @@ def run_reception_loop(transport, output_file, receiver_id):
             if event.type == enet.EVENT_TYPE_RECEIVE:
                 try:
                     # 2. Parse Protocol
-                    headers, encrypted_data = decode_packet_with_headers(event.packet.data)
+                    headers, encrypted_data = decode_packet_with_headers(
+                        event.packet.data
+                    )
 
                     # Convert to the dict format your processor expects
                     packet_dict = {
@@ -105,11 +109,13 @@ def run_reception_loop(transport, output_file, receiver_id):
                         "key_block_id": headers.get("key_block_id"),
                         "key_index": headers.get("key_index"),
                         "is_last": headers.get("is_last", False),
-                        "data": encrypted_data
+                        "data": encrypted_data,
                     }
 
                     # 3. Execute Logic
-                    finished = process_single_packet(packet_dict, writer, receiver_id, key_cache)
+                    finished = process_single_packet(
+                        packet_dict, writer, receiver_id, key_cache
+                    )
 
                     if finished:
                         break
@@ -132,3 +138,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

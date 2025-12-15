@@ -1,7 +1,7 @@
 import json
 import enet
 from src.app.transfer.transport import Transport
-from src.app.crypto import encryption
+from src.crypto import encryption
 from src.app.file_utils import FileStreamWriter
 from src.app.end_user_utils import (
     authenticate,
@@ -15,6 +15,7 @@ from src.app.end_user_utils import (
 NODE_SENDER_ID = "A"
 NODE_RECEIVER_ID = "B"
 import os
+
 NODE_LISTEN_IP = os.getenv("NODE_LISTEN_IP", "172.18.0.4")
 NODE_LISTEN_PORT = int(os.getenv("NODE_LISTEN_PORT", "12345"))
 OUTPUT_FILE = "received_data/reconstructed_patient_data.txt"

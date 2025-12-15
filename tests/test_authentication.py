@@ -1,5 +1,5 @@
 import pytest
-from src.app.crypto.authentication import generate_keys, sign, verify
+from src.crypto.authentication import generate_keys, sign, verify
 
 pytestmark = pytest.mark.skipif(
     __import__("importlib").util.find_spec("oqs") is None,

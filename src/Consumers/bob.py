@@ -1,7 +1,7 @@
 import json
 import time
 from src.app.transfer.transport import Transport
-from src.app.crypto import encryption
+from src.crypto import encryption
 from src.app.file_utils import split_file_into_chunks
 from src.app.end_user_utils import (
     authenticate,
@@ -13,6 +13,7 @@ from src.app.end_user_utils import (
 
 # Configuration
 import os
+
 DESTINATION_IP = os.getenv("DESTINATION_IP", "172.18.0.4")
 DESTINATION_PORT = int(os.getenv("DESTINATION_PORT", "12345"))
 FILE_PATH = os.getenv("FILE_PATH", "data/patient_records.txt")

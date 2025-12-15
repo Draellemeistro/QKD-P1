@@ -1,12 +1,10 @@
-from src.app.crypto.encryption import (
+from src.crypto.encryption import (
     pad_data,
     unpad_data,
     derive_AES256_key,
     split_iv_ciphertext,
     encrypt_AES256,
     decrypt_AES256,
-    encrypt_AES256_CBC,
-    decrypt_AES256_CBC,
 )
 
 
@@ -41,9 +39,9 @@ class TestAESCrypto:
 
     def test_encrypt_decrypt_AES256_CBC(self):
         plaintext = b"secret"
-        key = b"a" * 32
-        ct = encrypt_AES256_CBC(plaintext, key)
-        pt = decrypt_AES256_CBC(ct, key)
+        hex_key = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+        ct = encrypt_AES256(plaintext, hex_key)
+        pt = decrypt_AES256(ct, hex_key)
         assert pt == plaintext
 
 

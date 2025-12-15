@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, patch
-import src.app.crypto.authentication as auth
+import src.crypto.authentication as auth
 
 # # --- 1. new_key basic request/response ---
 # @patch("src.app.kms_client.requests.post")

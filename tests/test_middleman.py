@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import patch
 from src.app.middleman import app
 
 # NOTE: These tests need to be expanded and set up with proper mocking where necessary.
@@ -20,6 +21,7 @@ def test_connect_sender(client):
 def test_auth_success(client):
     response = client.post("/auth", json={"username": "user", "password": "pass"})
     assert response.status_code == 200
+    assert response.json["messa"]
 
 
 def test_auth_fail(client):
@@ -33,7 +35,20 @@ def test_request_file(client):
     assert "file" in response.get_json()
 
 
-def test_get_key(client):
+@patch("src.app.middleman.get_key")
+def test_get_key(mock_get_key, client):
+    mock_get_key.return_value = {
+        "index": 0,
+        "hexKey": "abcdef1234567890",
+        "blockId": "b1",
+    }
+    resp = client.post(
+        "/get_key", json={"sender_id": "A", "key_block_id": "b1", "key_index": 0}
+    )
+    assert resp.status_code == 200
+    assert resp.json["hexKey"] == "abcdef1234567890"
+    mock_get_key.assert_called_once_with("A", "b1", 0)
+
     response = client.post(
         "/get_key", json={"sender_id": "A", "key_block_id": "block", "key_index": 0}
     )

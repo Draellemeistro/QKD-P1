@@ -1,12 +1,12 @@
 import pytest
 from unittest.mock import patch
-from src.app.crypto.keylogic import (
+from src.crypto.keylogic import (
     refresh_key_block,
     refresh_key,
     encrypt_chunk,
     encrypt_all_chunks,
 )
-import src.app.crypto.encryption as encryption
+import src.crypto.encryption as encryption
 
 
 def test_refresh_key_block():

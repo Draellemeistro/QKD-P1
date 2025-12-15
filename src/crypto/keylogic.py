@@ -1,4 +1,4 @@
-import src.app.crypto.encryption as encryption
+import src.crypto.encryption as encryption
 
 refresh_interval = 100  # Example refresh interval
 refresh_interval_from_size = 1024 * 1024  # Example size-based refresh interval (1 MB)

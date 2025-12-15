@@ -15,14 +15,9 @@ else:
     kms_server_ip = "http://localhost:8095"  # Default value if not set
 
 
-def test_kms_api():
-    test_get_key()
-    test_new_key()
-
-
 @pytest.fixture
 def get_key_response():
-    return {"index": 42, "hexKey": "deadbeefcafebabe", "blockId": "1234"}
+    return {"index": 42, "hexKey": "abcdef1234567890", "blockId": "1234"}
 
 
 @pytest.fixture

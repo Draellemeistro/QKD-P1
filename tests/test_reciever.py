@@ -3,8 +3,8 @@ import json
 from unittest.mock import MagicMock, patch, mock_open
 from src.app.receiver import process_single_packet, run_reception_loop, start_server
 
-pytest.importorskip("enet")
 
+@pytest.mark.skipif("enet" not in globals(), reason="enet module not available")
 # --- 1. Pure Logic Tests (No Network Needed) ---
 
 
@@ -29,7 +29,9 @@ def test_process_single_packet_data(mock_get_key, mock_decrypt):
     }
 
     # Execute
-    finished = process_single_packet(packet, mock_writer, sender_id="B")
+    finished = process_single_packet(
+        packet, mock_writer, sender_id="B", key_cache={"id": None, "data": None}
+    )
 
     # Assertions
     assert finished is False
@@ -47,7 +49,9 @@ def test_process_single_packet_termination():
     mock_writer = MagicMock()
     packet = {"chunk_id": -1, "is_last": True}
 
-    finished = process_single_packet(packet, mock_writer, "B")
+    finished = process_single_packet(
+        packet, mock_writer, sender_id="B", key_cache={"id": None, "data": None}
+    )
 
     assert finished is True
     # Should not attempt to write anything
@@ -105,4 +109,3 @@ def test_start_server(mock_transport_cls):
     start_server("127.0.0.1", 9999)
 
     mock_transport_cls.assert_called_with(is_server=True, ip="127.0.0.1", port=9999)
-

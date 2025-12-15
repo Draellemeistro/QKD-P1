@@ -7,7 +7,7 @@ import sys
 from src.app.kms_api import new_key
 from src.app.transfer.transport import Transport
 from src.app.file_utils import split_file_into_chunks
-from src.app.crypto import encryption
+from src.crypto import encryption
 from src.app.transfer.network_utils import resolve_host
 from src.app.transfer.protocol import create_data_packet, create_termination_packet
 
@@ -15,8 +15,6 @@ from src.app.transfer.protocol import create_data_packet, create_termination_pac
 # 64KB:
 CHUNK_SIZE = 64 * 1024
 KEY_ROTATION_LIMIT = 1024 * 1024 * 10  # Rotate key every 10 MB
-
-
 
 
 def establish_connection(ip, port):
@@ -52,7 +50,9 @@ def send_chunk_packet(transport, chunk, key_data):
     # 1. Encrypt Payload
     encrypted_payload = encryption.encrypt_AES256(chunk["data"], key_data["hexKey"])
     # 2. Create Packet with headers
-    packet = create_data_packet(chunk["id"], key_data["blockId"], key_data["index"], encrypted_payload)    # 3. Send Packet Reliably
+    packet = create_data_packet(
+        chunk["id"], key_data["blockId"], key_data["index"], encrypted_payload
+    )  # 3. Send Packet Reliably
     transport.send_reliable(packet)
 
 
@@ -81,7 +81,7 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
                 current_key_data,
                 bytes_encrypted_with_current_key,
                 KEY_ROTATION_LIMIT,
-                receiver_id
+                receiver_id,
             )
 
             # If a new key was fetched, reset the counter
@@ -100,7 +100,7 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
 
             # Progress Log
             if chunk["id"] % 10 == 0:
-                print(f"Sent chunk {chunk['id']}...", end='\r')
+                print(f"Sent chunk {chunk['id']}...", end="\r")
 
         except Exception as e:
             print(f"\nCritical Error during transmission: {e}")
@@ -133,5 +133,3 @@ if __name__ == "__main__":
     print(f"Site ID: {peer_site_id}")
 
     run_file_transfer(peer_site_id, target_ip, target_port, "data/patient_records.txt")
-
-
