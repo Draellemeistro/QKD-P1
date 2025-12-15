@@ -1,42 +1,32 @@
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import padding
+from cryptography.exceptions import InvalidTag
 import secrets
-# REMOVED: import base64 (Not needed anymore)
 
-IV_size = 16
+# AES-GCM Standard Nonce (IV) size is 12 bytes
+IV_size = 12
+# AES-GCM Standard Tag size is 16 bytes
+TAG_SIZE = 16
+
 
 # --- Helper Functions ---
-
-def pad_data(data: bytes) -> bytes:
-    """
-    Applies PKCS7 padding.
-    Expects input 'data' to be BYTES.
-    """
-    padder = padding.PKCS7(128).padder()
-    return padder.update(data) + padder.finalize()
-
-
-def unpad_data(padded_data: bytes) -> bytes:
-    """
-    Removes PKCS7 padding.
-    """
-    unpadder = padding.PKCS7(128).unpadder()
-    return unpadder.update(padded_data) + unpadder.finalize()
-
 
 def derive_AES256_key(hex_key: str) -> bytes:
     return bytes.fromhex(hex_key)
 
 
-def split_iv_ciphertext(data_bytes: bytes):
+def split_iv_tag_ciphertext(data_bytes: bytes):
     """
-    Splits the IV and ciphertext directly from raw bytes.
-    No Base64 decoding here.
+    Splits the IV, Tag, and ciphertext directly from raw bytes.
+    Structure: IV (12 bytes) | Tag (16 bytes) | Ciphertext (...)
     """
+    if len(data_bytes) < IV_size + TAG_SIZE:
+        raise ValueError("Data too short to contain IV and Tag")
+
     iv = data_bytes[:IV_size]
-    ciphertext = data_bytes[IV_size:]
-    return iv, ciphertext
+    tag = data_bytes[IV_size: IV_size + TAG_SIZE]
+    ciphertext = data_bytes[IV_size + TAG_SIZE:]
+    return iv, tag, ciphertext
 
 
 # --- Main Encryption/Decryption ---
@@ -45,42 +35,43 @@ def encrypt_AES256(plaintext_bytes: bytes, hex_key: str) -> bytes:
     # 1. Derive Key
     byte_key = derive_AES256_key(hex_key)
 
-    # 2. Pad (Input must be bytes)
-    padded_data = pad_data(plaintext_bytes)
+    # 2. No Padding needed for GCM (it acts as a stream cipher)
 
     # 3. Encrypt
     iv = secrets.token_bytes(IV_size)
-    cipher = Cipher(algorithms.AES(byte_key), modes.CBC(iv), backend=default_backend())
+
+    # Initialize GCM Cipher
+    cipher = Cipher(algorithms.AES(byte_key), modes.GCM(iv), backend=default_backend())
     encryptor = cipher.encryptor()
 
-    ciphertext = encryptor.update(padded_data) + encryptor.finalize()
+    # Encrypt the payload
+    ciphertext = encryptor.update(plaintext_bytes) + encryptor.finalize()
 
-    # RETURN RAW BYTES (IV + Ciphertext)
-    return iv + ciphertext
+    # Retrieve the Authentication Tag
+    tag = encryptor.tag
+
+    # RETURN RAW BYTES (IV + Tag + Ciphertext)
+    return iv + tag + ciphertext
 
 
-def decrypt_AES256(ciphertext_bytes: bytes, hex_key: str, mode="CBC") -> bytes:
+def decrypt_AES256(encrypted_bytes: bytes, hex_key: str, mode="GCM") -> bytes:
     byte_key = derive_AES256_key(hex_key)
 
-    if mode == "CBC":
-        padded_plaintext = decrypt_AES256_CBC(ciphertext_bytes, byte_key)
-    else:
-        raise ValueError("Unsupported mode. Use 'CBC'.")
-
     try:
-        # Return UNPADDED BYTES directly
-        return unpad_data(padded_plaintext)
-    except ValueError:
-        # Raise error so the receiver can catch it (don't return a string!)
-        raise ValueError("Decryption Error: Invalid Padding")
+        # 1. Split raw bytes into components
+        iv, tag, ciphertext = split_iv_tag_ciphertext(encrypted_bytes)
 
+        # 2. Initialize GCM Cipher for Decryption
+        # We must pass the Tag here for verification
+        cipher = Cipher(algorithms.AES(byte_key), modes.GCM(iv, tag), backend=default_backend())
+        decryptor = cipher.decryptor()
 
-def decrypt_AES256_CBC(ciphertext_bytes: bytes, byte_key: bytes) -> bytes:
-    # Split raw bytes directly
-    iv, ciphertext = split_iv_ciphertext(ciphertext_bytes)
+        # 3. Decrypt and Verify
+        # finalize() will raise InvalidTag if the tag does not match
+        decrypted_data = decryptor.update(ciphertext) + decryptor.finalize()
 
-    cipher = Cipher(algorithms.AES(byte_key), modes.CBC(iv), backend=default_backend())
-    decryptor = cipher.decryptor()
+        return decrypted_data
 
-    decrypted_data = decryptor.update(ciphertext) + decryptor.finalize()
-    return decrypted_data
+    except InvalidTag:
+        # Raise ValueError to maintain compatibility with receiver.py's error handling
+        raise ValueError("Decryption Error: Invalid Tag (Authentication Failed)")
