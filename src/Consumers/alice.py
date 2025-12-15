@@ -1,9 +1,11 @@
 import json
+import os
 import enet
-from src.app.transfer.transport import Transport
 from src.crypto import encryption
+from src.crypto.authentication import load_public_key, load_private_key, sign, verify
+from src.app.transfer.transport import Transport
 from src.app.file_utils import FileStreamWriter
-from src.app.end_user_utils import (
+from src.consumers.end_user_utils import (
     authenticate,
     request_get_key,
     connect_to_node,
@@ -14,7 +16,6 @@ from src.app.end_user_utils import (
 # Configuration
 NODE_SENDER_ID = "A"
 NODE_RECEIVER_ID = "B"
-import os
 
 NODE_LISTEN_IP = os.getenv("NODE_LISTEN_IP", "172.18.0.4")
 NODE_LISTEN_PORT = int(os.getenv("NODE_LISTEN_PORT", "12345"))
@@ -69,7 +70,7 @@ def process_single_packet(packet_dict, writer, sender_id):
         )
 
         # 4. Write to Stream
-        writer.append(decrypted_str.encode("utf-8"))
+        writer.append(decrypted_str)
 
         # Log progress (only every 10th chunk to reduce console spam)
         if chunk_id % 10 == 0:
@@ -116,7 +117,7 @@ def run_reception_loop(transport, output_file, receiver_id):
 
 def main():
     node_id = connect_to_node("receiver")
-    auth_check = authenticate()
+    auth_check = authenticate("alice")
     if auth_check:
         if node_id != NODE_RECEIVER_ID:
             print(

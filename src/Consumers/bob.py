@@ -3,7 +3,7 @@ import time
 from src.app.transfer.transport import Transport
 from src.crypto import encryption
 from src.app.file_utils import split_file_into_chunks
-from src.app.end_user_utils import (
+from src.consumers.end_user_utils import (
     authenticate,
     request_new_key,
     connect_to_node,
@@ -144,7 +144,7 @@ def main():
     if not node_id:
         print("Failed to connect to QKD node.")
 
-    auth_check = authenticate()
+    auth_check = authenticate("bob")
     if auth_check:
         if node_id != NODE_SENDER_ID:
             print(

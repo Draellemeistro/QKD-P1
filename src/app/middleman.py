@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from typing import Optional
 from src.app.kms_api import get_key, new_key
+from src.crypto.authentication import load_public_key, load_private_key, sign, verify
 import os
 
 # Constants
@@ -73,6 +74,22 @@ def serve_new_key():
 @app.route("/auth", methods=["POST"])
 def serve_auth():
     data = request.json or {}
+    message = data.get("message")
+    signature = data.get("signature")
+    identifier = data.get("identifier")
+    if isinstance(message, str):
+        message = message.encode()
+    if isinstance(signature, str):
+        signature = signature.encode()
+    if message is None or signature is None or identifier is None:
+        return jsonify({"error": "Missing required fields"}), 400
+    consumer_public_key = load_public_key(identifier)
+    if verify(
+        message,
+        signature,
+        consumer_public_key,
+    ):
+        return jsonify({"status": "success"})
     if not check_auth(data.get("username"), data.get("password")):
         return jsonify({"error": "Unauthorized"}), 401
     return jsonify({"message": "Authenticated"})

@@ -1,5 +1,7 @@
 import requests
 import os
+import src.crypto.encryption as encr
+import src.crypto.authentication as auth
 
 NODE_API_URL = f"http://{os.getenv('NODE_HOST', 'localhost')}:{os.getenv('NODE_PORT', '8000')}"  # Base URL for node middleman API
 
@@ -31,8 +33,8 @@ def request_new_key(receiver_id=None):
     return r.json()
 
 
-def authenticate():
-    authenticated = request_authentication()
+def authenticate(identifier: str):
+    authenticated = request_authentication(identifier)
     if authenticated.get("status") == "success":
         print("Authenticated with node")
         return True
@@ -44,11 +46,24 @@ def authenticate():
         return False
 
 
-def request_authentication():
+def request_authentication(identifier: str, message=None):
     """Authenticate against the node server.
     Matches server `/auth` (POST) expecting JSON body.
     """
-    params = dummy_authenticate()
+    private_key, public_key = auth.load_keys(identifier)
+    if not private_key and not public_key:
+        raise ValueError("No keys found for identifier")
+    if message and isinstance(message, str):
+        message = message.encode()
+    if message is None:
+        message = b"Authenticate me"
+    signature = auth.sign(message, private_key)
+
+    params = {
+        "message": message.decode(),
+        "signature": signature.hex(),
+        "identifier": identifier,
+    }
     r = requests.post(f"{NODE_API_URL}/auth", json=params)
     r.raise_for_status()
     return r.json()
