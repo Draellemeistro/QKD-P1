@@ -1,4 +1,5 @@
 import enet
+import os
 from src.app.kms_api import get_key
 from src.app.transfer.transport import Transport
 from src.app.crypto import encryption
