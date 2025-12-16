@@ -2,7 +2,7 @@ import time
 import sys
 from src.app.kms_api import new_key
 from src.app.transfer.transport import Transport
-from src.app.file_utils import split_file_into_chunks
+from src.app.file_utils import split_file_into_chunks, hash_file
 from src.app.crypto import encryption
 from src.app.transfer.network_utils import resolve_host
 from src.app.transfer.protocol import create_data_packet, create_termination_packet
@@ -10,8 +10,8 @@ from src.app.transfer.protocol import create_data_packet, create_termination_pac
 # Configuration Constants
 # 64KB:
 CHUNK_SIZE = 64 * 1024
-KEY_ROTATION_LIMIT = 1024 * 1024 * 10  # Rotate key every 10 MB
-
+# Rotate key every 1MB of data encrypted
+KEY_ROTATION_LIMIT = 1024 * 1024 * 1
 
 
 
@@ -62,6 +62,10 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
         print(f"Error: Could not connect to {destination_ip}:{destination_port}")
         return
 
+    print(f"Calculating hash for {file_path}...")
+    file_hash = hash_file(file_path)
+    print(f"File Hash (SHA-256): {file_hash}")
+
     current_key_data = None
     bytes_encrypted_with_current_key = 0
     total_bytes = 0
@@ -104,7 +108,7 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
 
     # 3. Termination
     print("\nSending termination signal...")
-    end_packet = create_termination_packet()
+    end_packet = create_termination_packet(file_hash)
     transport.send_reliable(end_packet)
 
     # Ensure everything leaves the buffer

@@ -3,7 +3,7 @@ import os
 from src.app.kms_api import get_key
 from src.app.transfer.transport import Transport
 from src.app.crypto import encryption
-from src.app.file_utils import FileStreamWriter
+from src.app.file_utils import FileStreamWriter, validate_file_hash
 from src.app.transfer.protocol import decode_packet_with_headers
 
 # Configuration
@@ -37,11 +37,6 @@ def process_single_packet(packet_dict, writer, sender_id, key_cache):
 
     Returns: True if transfer is complete, False otherwise.
     """
-    # 1. Termination Check
-    if packet_dict.get("is_last", False):
-        print("\nTermination packet received.")
-        return True
-
     chunk_id = packet_dict.get("chunk_id", -1)
 
     try:
@@ -85,6 +80,7 @@ def run_reception_loop(transport, output_file, receiver_id):
     """
     # Initialize Key Cache
     key_cache = {"id": None, "data": None}
+    received_hash = ""
 
     # Open the file stream
     with FileStreamWriter(output_file) as writer:
@@ -109,16 +105,26 @@ def run_reception_loop(transport, output_file, receiver_id):
                     }
 
                     # 3. Execute Logic
-                    finished = process_single_packet(packet_dict, writer, receiver_id, key_cache)
+                    if packet_dict["is_last"]:
+                        received_hash = headers.get("file_hash", "")
+                        print("\nTermination packet received.")
+                        break  # Exit the loop, closing the writer automatically
 
-                    if finished:
-                        break
+                        # Process Data Packet (Decrypt & Write)
+                    process_single_packet(packet_dict, writer, receiver_id, key_cache)
+
 
                 except (ValueError, UnicodeDecodeError) as e:
                     print(f"Error: Received malformed packet: {e}")
 
             elif event.type == enet.EVENT_TYPE_CONNECT:
                 print(f"Client connected: {event.peer.address}")
+
+    print("Verifying integrity...")
+    if validate_file_hash(output_file, received_hash):
+        print(f"SUCCESS: Integrity Verified. Hash: {received_hash}")
+    else:
+        print(f"WARNING: Hash Mismatch! Sent: {received_hash}")
 
 
 def main():

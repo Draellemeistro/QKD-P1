@@ -43,10 +43,11 @@ def create_data_packet(chunk_id: int, key_block_id: str, key_index: int, data: b
     return encode_packet_with_headers(headers, data)
 
 
-def create_termination_packet() -> bytes:
+def create_termination_packet(file_hash="") -> bytes:
     """Creates the signal packet to end transmission."""
     headers = {
         "chunk_id": "-1",
-        "is_last": True
+        "is_last": True,
+        "file_hash": file_hash
     }
     return encode_packet_with_headers(headers, b"")
