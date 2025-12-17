@@ -14,7 +14,7 @@ from src.app.transfer.network_utils import resolve_host
 from src.app.transfer.protocol import create_data_packet, create_termination_packet, decode_packet_with_headers
 
 # CONFIGURATION FOR 1Gbps PIPELINE
-CHUNK_SIZE = 1024 * 1024 * 1
+CHUNK_SIZE = 1024 * 1024 * 4  # Increased to 4MB to maximize throughput
 KEY_ROTATION_LIMIT = 1024 * 1024 * 500
 MAX_PIPELINE_DEPTH = 32
 
@@ -40,7 +40,6 @@ class PipelineMetrics:
             avg_r = sum(self.read_times) / len(self.read_times)
             avg_e = sum(self.enc_times) / len(self.enc_times)
             avg_n = sum(self.net_times) / len(self.net_times)
-            # Clear for next window
             self.read_times, self.enc_times, self.net_times = [], [], []
             return avg_r, avg_e, avg_n
 
@@ -71,6 +70,7 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
             item = encryption_queue.get()
             if item is None:
                 network_queue.put(None)
+                encryption_queue.task_done()
                 break
 
             chunk, key_data, r_dur = item
@@ -85,7 +85,9 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
     def network_worker():
         while True:
             item = network_queue.get()
-            if item is None: break
+            if item is None:
+                network_queue.task_done()
+                break
             packet, r_dur, e_dur = item
 
             n_start = time.time()
@@ -118,21 +120,27 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
             bytes_sent_with_current_key += chunk["size"]
             total_bytes += chunk["size"]
 
-            if chunk["id"] % 100 == 0:
+            if chunk["id"] % 50 == 0:
                 avg_r, avg_e, avg_n = metrics.get_averages()
                 log_event(
                     f"Progress: {total_bytes / 1024 / 1024:.1f}MB | Avg Read/Hash: {avg_r:.4f}s | Avg Enc: {avg_e:.4f}s | Avg Net: {avg_n:.4f}s")
 
             last_chunk_time = time.time()
 
+        # CRITICAL: Signal end and wait for all workers to finish
+        log_event("Finishing data stream, flushing pipeline...")
         for _ in range(4): encryption_queue.put(None)
+
+        encryption_queue.join()
+        network_queue.join()
+        executor.shutdown(wait=True)
 
     except Exception as e:
         log_event(f"Critical Error: {e}")
     finally:
-        executor.shutdown(wait=True)
         fetcher.stop()
 
+    # GENERATE HASH ONLY AFTER PIPELINE IS FULLY FLUSHED
     final_hash = xxh_hasher.hexdigest()
     log_event(f"Final File xxHash: {final_hash}")
     transport.send_reliable(create_termination_packet(final_hash))
@@ -140,6 +148,20 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
     duration = time.time() - start_time
     mb_sec = (total_bytes / 1024 / 1024) / (duration if duration > 0 else 0.001)
     log_event(f"Transfer complete: {mb_sec:.2f} MB/s")
+
+    # WAIT FOR RECEIVER ACK
+    log_event("Waiting for Receiver Verification (ACK)...")
+    try:
+        ack_data = transport.receive_packet()
+        if ack_data:
+            headers, _ = decode_packet_with_headers(ack_data)
+            if headers.get("type") == "ACK":
+                status = headers.get("status")
+                msg = headers.get("message")
+                log_event(f"[Receiver Reply] Status: {status} | Message: {msg}")
+    except Exception as e:
+        log_event(f"Error reading ACK: {e}")
+
     transport.close()
 
 
