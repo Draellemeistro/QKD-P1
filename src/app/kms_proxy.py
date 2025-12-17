@@ -18,7 +18,7 @@ app = Flask(__name__)
 # 300 kbps (100 km)  / 256 bits = ~1,200 keys/sec
 # BUT: To see the effect visibly in a test, we use lower numbers:
 PHYSICS_CONFIG = {
-    "KEY_REFILL_RATE": 5.0,  # Keys per second (Adjust this to simulate distance!)
+    "KEY_REFILL_RATE": 12000,  # Keys per second (Adjust this to simulate distance!)
     "MAX_BUCKET_SIZE": 10.0  # Burst capacity (How many keys can sit in buffer)
 }
 
