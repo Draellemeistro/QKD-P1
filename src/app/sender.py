@@ -1,7 +1,7 @@
 import time
 import sys
 import hashlib
-import datetime  # Added for timestamps
+import datetime
 
 from src.app.transfer.tcp_transport import TcpTransport
 from src.app.key_fetcher import KeyFetcher
@@ -11,13 +11,8 @@ from src.app.transfer.network_utils import resolve_host
 from src.app.transfer.protocol import create_data_packet, create_termination_packet, decode_packet_with_headers
 
 # CONFIGURATION
-CHUNK_SIZE = 1024 * 1024 * 4  # Optimized to 4MB based on previous tests
+CHUNK_SIZE = 1024 * 1024 * 4
 KEY_ROTATION_LIMIT = 1024 * 1024 * 100
-
-def send_chunk_packet(transport, chunk, key_data):
-    encrypted_payload = encryption.encrypt_AES256(chunk["data"], key_data["hexKey"])
-    packet = create_data_packet(chunk["id"], key_data["blockId"], key_data["index"], encrypted_payload)
-    transport.send_reliable(packet)
 
 def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
     transport = TcpTransport(is_server=False)
@@ -28,7 +23,6 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
     fetcher = KeyFetcher(receiver_id)
     sha256_hash = hashlib.sha256()
 
-    # Helper function for timestamped logs
     def log_event(msg):
         timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
         print(f"[{timestamp}] {msg}")
@@ -46,6 +40,8 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
         log_event(f"Initial key acquired (Index: {current_key_data['index']})")
 
         for chunk in split_file_and_hash(file_path, CHUNK_SIZE, sha256_hash):
+            # Timing the start of this specific chunk iteration
+            chunk_proc_start = time.time()
 
             if bytes_encrypted_with_current_key >= KEY_ROTATION_LIMIT:
                 log_event("Rotating key...")
@@ -53,14 +49,28 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
                 log_event(f"New key acquired (Index: {current_key_data['index']})")
                 bytes_encrypted_with_current_key = 0
 
-            send_chunk_packet(transport, chunk, current_key_data)
+            # 1. Profile Encryption
+            enc_start = time.time()
+            encrypted_payload = encryption.encrypt_AES256(chunk["data"], current_key_data["hexKey"])
+            enc_duration = time.time() - enc_start
+
+            # 2. Profile Network Transmission
+            net_start = time.time()
+            packet = create_data_packet(chunk["id"], current_key_data["blockId"], current_key_data["index"], encrypted_payload)
+            transport.send_reliable(packet)
+            net_duration = time.time() - net_start
 
             bytes_encrypted_with_current_key += chunk["size"]
             total_bytes += chunk["size"]
 
-            # Changed: No longer using '\r', using log_event for separate lines
+            # Provide detailed metrics every 50 chunks
             if chunk["id"] % 50 == 0:
-                log_event(f"Sent chunk {chunk['id']} (Total: {total_bytes / 1024 / 1024:.2f} MB)")
+                log_event(
+                    f"Chunk {chunk['id']} Metrics -> "
+                    f"Encrypt: {enc_duration:.4f}s | "
+                    f"Network: {net_duration:.4f}s | "
+                    f"Total: {total_bytes / 1024 / 1024:.2f} MB"
+                )
 
     except Exception as e:
         log_event(f"Critical Error: {e}")
@@ -92,8 +102,6 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
                     log_event("Success: Integrity Verified.")
                 else:
                     log_event("Failure: Receiver reported error.")
-        else:
-            log_event("Error: Connection closed by server before ACK.")
     except Exception as e:
         log_event(f"Error reading ACK: {e}")
 
