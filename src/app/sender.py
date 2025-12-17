@@ -9,8 +9,8 @@ from src.app.transfer.network_utils import resolve_host
 from src.app.transfer.protocol import create_data_packet, create_termination_packet, decode_packet_with_headers
 
 # CONFIGURATION
-CHUNK_SIZE = 1024 * 1024 * 1  # 1 MB Chunks
-KEY_ROTATION_LIMIT = 1024 * 1024 * 10  # 10 MB Rotation
+CHUNK_SIZE = 1024 * 1024 * 1
+KEY_ROTATION_LIMIT = 1024 * 1024 * 100
 
 
 def send_chunk_packet(transport, chunk, key_data):

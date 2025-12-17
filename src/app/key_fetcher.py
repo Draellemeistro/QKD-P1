@@ -28,7 +28,7 @@ class KeyFetcher:
                     time.sleep(0.005)
                     continue
 
-                # Fetch from KMS 
+                # Fetch from KMS
                 key_data = new_key(self.receiver_id)
 
                 # Add to buffer
