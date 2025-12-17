@@ -9,7 +9,7 @@ IV_size = 12
 TAG_SIZE = 16
 
 
-# --- Helper Functions ---
+# Helper Functions
 
 def derive_AES256_key(hex_key: str) -> bytes:
     return bytes.fromhex(hex_key)
@@ -29,15 +29,15 @@ def split_iv_tag_ciphertext(data_bytes: bytes):
     return iv, tag, ciphertext
 
 
-# --- Main Encryption/Decryption ---
+# Main Encryption/Decryption
 
 def encrypt_AES256(plaintext_bytes: bytes, hex_key: str) -> bytes:
-    # 1. Derive Key
+    # Derive Key
     byte_key = derive_AES256_key(hex_key)
 
-    # 2. No Padding needed for GCM (it acts as a stream cipher)
+    # No Padding needed for GCM (it acts as a stream cipher)
 
-    # 3. Encrypt
+    # Encrypt
     iv = secrets.token_bytes(IV_size)
 
     # Initialize GCM Cipher
@@ -58,15 +58,15 @@ def decrypt_AES256(encrypted_bytes: bytes, hex_key: str, mode="GCM") -> bytes:
     byte_key = derive_AES256_key(hex_key)
 
     try:
-        # 1. Split raw bytes into components
+        # Split raw bytes into components
         iv, tag, ciphertext = split_iv_tag_ciphertext(encrypted_bytes)
 
-        # 2. Initialize GCM Cipher for Decryption
+        # Initialize GCM Cipher for Decryption
         # We must pass the Tag here for verification
         cipher = Cipher(algorithms.AES(byte_key), modes.GCM(iv, tag), backend=default_backend())
         decryptor = cipher.decryptor()
 
-        # 3. Decrypt and Verify
+        # Decrypt and Verify
         # finalize() will raise InvalidTag if the tag does not match
         decrypted_data = decryptor.update(ciphertext) + decryptor.finalize()
 
