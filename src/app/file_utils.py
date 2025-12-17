@@ -2,6 +2,14 @@ import os
 import hashlib
 import mmap
 
+def split_file_and_hash(file_path, chunk_size_bytes, hash_obj):
+    """
+    Reads a file lazily and updates the provided hash object for each chunk.
+    This replaces the need to read the file twice.
+    """
+    for chunk in split_file_into_chunks(file_path, chunk_size_bytes):
+        hash_obj.update(chunk["data"])
+        yield chunk
 
 def split_file_into_chunks(file_path, chunk_size_bytes):
     """
