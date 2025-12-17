@@ -13,15 +13,13 @@ from src.app.crypto import encryption
 from src.app.transfer.network_utils import resolve_host
 from src.app.transfer.protocol import create_data_packet, create_termination_packet, decode_packet_with_headers
 
-# CONFIGURATION FOR 1Gbps PIPELINE
-CHUNK_SIZE = 1024 * 1024 * 4  # 4MB chunks for high throughput
+# CONFIGURATION FOR 2GBPS+ PIPELINE
+CHUNK_SIZE = 1024 * 1024 * 4
 KEY_ROTATION_LIMIT = 1024 * 1024 * 500
-MAX_PIPELINE_DEPTH = 32
+MAX_PIPELINE_DEPTH = 64  # Increased depth for higher speeds
 
 
 class PipelineMetrics:
-    """Synchronized metrics collector for multithreaded pipelines."""
-
     def __init__(self):
         self.lock = threading.Lock()
         self.read_times = []
@@ -50,7 +48,7 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
         print(f"Error: Could not connect to {destination_ip}:{destination_port}")
         return
 
-    fetcher = KeyFetcher(receiver_id, buffer_size=200)
+    fetcher = KeyFetcher(receiver_id, buffer_size=500)  # Larger buffer for 2Gbps
     xxh_hasher = xxhash.xxh3_64()
     metrics = PipelineMetrics()
 
@@ -58,7 +56,7 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
         timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
         print(f"[{timestamp}] {msg}")
 
-    log_event(f"Starting 1Gbps Pipelined Transfer for {file_path}...")
+    log_event(f"Starting 2Gbps Pipelined Transfer for {file_path}...")
 
     encryption_queue = Queue(maxsize=MAX_PIPELINE_DEPTH)
     network_queue = Queue(maxsize=MAX_PIPELINE_DEPTH)
@@ -70,7 +68,7 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
             item = encryption_queue.get()
             try:
                 if item is None:
-                    network_queue.put(None)  # Signal network worker
+                    # FIX: Do NOT signal network_queue here. Just exit.
                     break
 
                 chunk, key_data, r_dur = item
@@ -99,19 +97,19 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
             finally:
                 network_queue.task_done()
 
-    # We use 4 encryption threads and 1 network thread
-    executor = ThreadPoolExecutor(max_workers=5)
-    for _ in range(4): executor.submit(encryption_worker)
+    # Launch 12 Encryption Threads (for 16 VCPU) + 1 Network Thread
+    executor = ThreadPoolExecutor(max_workers=13)
+    for _ in range(12): executor.submit(encryption_worker)
     executor.submit(network_worker)
 
     try:
         log_event("Fetching initial key...")
         current_key_data = fetcher.get_next_key()
-        log_event(f"Initial key acquired (Index: {current_key_data['index']})")
 
         bytes_sent_with_current_key = 0
         last_chunk_time = time.time()
 
+        # STAGE 1: PRODUCER
         for chunk in split_file_and_hash_xxh(file_path, CHUNK_SIZE, xxh_hasher):
             r_duration = time.time() - last_chunk_time
 
@@ -130,11 +128,21 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
 
             last_chunk_time = time.time()
 
-        # 1. SHUTDOWN SEQUENCE: Send termination signals to workers
-        log_event("Finishing data stream, flushing pipeline...")
-        for _ in range(4): encryption_queue.put(None)
+        # STAGE 2: FLUSH ENCRYPTION
+        log_event("Flushing encryption queue...")
+        # Send stop signal to all 12 workers
+        for _ in range(12): encryption_queue.put(None)
 
-        # 2. Wait for all processing to complete without deadlocking .join()
+        # BLOCK until all encryption is 100% finished
+        encryption_queue.join()
+
+        # STAGE 3: FLUSH NETWORK
+        log_event("Flushing network queue...")
+        # Now that encryption is empty, we know network_queue has ALL data packets
+        network_queue.put(None)
+        network_queue.join()
+
+        # Shutdown threads cleanly
         executor.shutdown(wait=True)
 
     except Exception as e:
@@ -142,7 +150,6 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
     finally:
         fetcher.stop()
 
-    # 3. GENERATE HASH ONLY AFTER PIPELINE IS FULLY FLUSHED
     final_hash = xxh_hasher.hexdigest()
     log_event(f"Final File xxHash: {final_hash}")
     transport.send_reliable(create_termination_packet(final_hash))
@@ -151,7 +158,6 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
     mb_sec = (total_bytes / 1024 / 1024) / (duration if duration > 0 else 0.001)
     log_event(f"Transfer complete: {mb_sec:.2f} MB/s")
 
-    # 4. WAIT FOR RECEIVER ACK
     log_event("Waiting for Receiver Verification (ACK)...")
     try:
         ack_data = transport.receive_packet()
