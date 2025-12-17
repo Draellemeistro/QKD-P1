@@ -4,11 +4,11 @@ qnlSiteKeyLoc: qll/keys
 siteId: B
 port: 9292
 keyBytesSz: 32
-keyBlockSz: 4 
+keyBlockSz: 1024
 qllBlockSz: 4096 
 headerSz: 132
 kmsIP: localhost
 kmsPort: 9393
 OTPConfig:
- keyBlockSz: 4
+ keyBlockSz: 1024
  keyLoc: otp/keys
