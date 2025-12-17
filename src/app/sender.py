@@ -10,7 +10,7 @@ from src.app.transfer.network_utils import resolve_host
 from src.app.transfer.protocol import create_data_packet, create_termination_packet, decode_packet_with_headers
 
 # CONFIGURATION
-CHUNK_SIZE = 1024 * 1024 * 4
+CHUNK_SIZE = 1024 * 1024 * 16
 KEY_ROTATION_LIMIT = 1024 * 1024 * 100
 
 
