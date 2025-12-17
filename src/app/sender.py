@@ -14,7 +14,7 @@ from src.app.transfer.network_utils import resolve_host
 from src.app.transfer.protocol import create_data_packet, create_termination_packet, decode_packet_with_headers
 
 # CONFIGURATION FOR 1Gbps PIPELINE
-CHUNK_SIZE = 1024 * 1024 * 4  # Increased to 4MB to maximize throughput
+CHUNK_SIZE = 1024 * 1024 * 4  # 4MB chunks for high throughput
 KEY_ROTATION_LIMIT = 1024 * 1024 * 500
 MAX_PIPELINE_DEPTH = 32
 
@@ -68,35 +68,38 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
     def encryption_worker():
         while True:
             item = encryption_queue.get()
-            if item is None:
-                network_queue.put(None)
+            try:
+                if item is None:
+                    network_queue.put(None)  # Signal network worker
+                    break
+
+                chunk, key_data, r_dur = item
+                e_start = time.time()
+                encrypted_payload = encryption.encrypt_AES256(chunk["data"], key_data["hexKey"])
+                e_duration = time.time() - e_start
+
+                packet = create_data_packet(chunk["id"], key_data["blockId"], key_data["index"], encrypted_payload)
+                network_queue.put((packet, r_dur, e_duration))
+            finally:
                 encryption_queue.task_done()
-                break
-
-            chunk, key_data, r_dur = item
-            e_start = time.time()
-            encrypted_payload = encryption.encrypt_AES256(chunk["data"], key_data["hexKey"])
-            e_duration = time.time() - e_start
-
-            packet = create_data_packet(chunk["id"], key_data["blockId"], key_data["index"], encrypted_payload)
-            network_queue.put((packet, r_dur, e_duration))
-            encryption_queue.task_done()
 
     def network_worker():
         while True:
             item = network_queue.get()
-            if item is None:
+            try:
+                if item is None:
+                    break
+                packet, r_dur, e_dur = item
+
+                n_start = time.time()
+                transport.send_reliable(packet)
+                n_duration = time.time() - n_start
+
+                metrics.report(r_dur, e_dur, n_duration)
+            finally:
                 network_queue.task_done()
-                break
-            packet, r_dur, e_dur = item
 
-            n_start = time.time()
-            transport.send_reliable(packet)
-            n_duration = time.time() - n_start
-
-            metrics.report(r_dur, e_dur, n_duration)
-            network_queue.task_done()
-
+    # We use 4 encryption threads and 1 network thread
     executor = ThreadPoolExecutor(max_workers=5)
     for _ in range(4): executor.submit(encryption_worker)
     executor.submit(network_worker)
@@ -127,12 +130,11 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
 
             last_chunk_time = time.time()
 
-        # CRITICAL: Signal end and wait for all workers to finish
+        # 1. SHUTDOWN SEQUENCE: Send termination signals to workers
         log_event("Finishing data stream, flushing pipeline...")
         for _ in range(4): encryption_queue.put(None)
 
-        encryption_queue.join()
-        network_queue.join()
+        # 2. Wait for all processing to complete without deadlocking .join()
         executor.shutdown(wait=True)
 
     except Exception as e:
@@ -140,7 +142,7 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
     finally:
         fetcher.stop()
 
-    # GENERATE HASH ONLY AFTER PIPELINE IS FULLY FLUSHED
+    # 3. GENERATE HASH ONLY AFTER PIPELINE IS FULLY FLUSHED
     final_hash = xxh_hasher.hexdigest()
     log_event(f"Final File xxHash: {final_hash}")
     transport.send_reliable(create_termination_packet(final_hash))
@@ -149,16 +151,14 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
     mb_sec = (total_bytes / 1024 / 1024) / (duration if duration > 0 else 0.001)
     log_event(f"Transfer complete: {mb_sec:.2f} MB/s")
 
-    # WAIT FOR RECEIVER ACK
+    # 4. WAIT FOR RECEIVER ACK
     log_event("Waiting for Receiver Verification (ACK)...")
     try:
         ack_data = transport.receive_packet()
         if ack_data:
             headers, _ = decode_packet_with_headers(ack_data)
             if headers.get("type") == "ACK":
-                status = headers.get("status")
-                msg = headers.get("message")
-                log_event(f"[Receiver Reply] Status: {status} | Message: {msg}")
+                log_event(f"[Receiver Reply] Status: {headers.get('status')} | Message: {headers.get('message')}")
     except Exception as e:
         log_event(f"Error reading ACK: {e}")
 
