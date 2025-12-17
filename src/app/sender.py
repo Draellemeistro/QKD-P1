@@ -1,24 +1,23 @@
 import time
 import sys
 import hashlib
+import datetime  # Added for timestamps
 
 from src.app.transfer.tcp_transport import TcpTransport
 from src.app.key_fetcher import KeyFetcher
-from src.app.file_utils import split_file_and_hash  # Updated import
+from src.app.file_utils import split_file_and_hash
 from src.app.crypto import encryption
 from src.app.transfer.network_utils import resolve_host
 from src.app.transfer.protocol import create_data_packet, create_termination_packet, decode_packet_with_headers
 
 # CONFIGURATION
-CHUNK_SIZE = 1024 * 1024 * 16
+CHUNK_SIZE = 1024 * 1024 * 4  # Optimized to 4MB based on previous tests
 KEY_ROTATION_LIMIT = 1024 * 1024 * 100
-
 
 def send_chunk_packet(transport, chunk, key_data):
     encrypted_payload = encryption.encrypt_AES256(chunk["data"], key_data["hexKey"])
     packet = create_data_packet(chunk["id"], key_data["blockId"], key_data["index"], encrypted_payload)
     transport.send_reliable(packet)
-
 
 def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
     transport = TcpTransport(is_server=False)
@@ -27,11 +26,14 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
         return
 
     fetcher = KeyFetcher(receiver_id)
-
-    # Initialize hash object
     sha256_hash = hashlib.sha256()
 
-    print(f"Starting transfer (TCP) for {file_path}...")
+    # Helper function for timestamped logs
+    def log_event(msg):
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        print(f"[{timestamp}] {msg}")
+
+    log_event(f"Starting transfer (TCP) for {file_path}...")
 
     current_key_data = None
     bytes_encrypted_with_current_key = 0
@@ -39,12 +41,16 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
     start_time = time.time()
 
     try:
+        log_event("Fetching initial key...")
         current_key_data = fetcher.get_next_key()
+        log_event(f"Initial key acquired (Index: {current_key_data['index']})")
 
         for chunk in split_file_and_hash(file_path, CHUNK_SIZE, sha256_hash):
 
             if bytes_encrypted_with_current_key >= KEY_ROTATION_LIMIT:
+                log_event("Rotating key...")
                 current_key_data = fetcher.get_next_key()
+                log_event(f"New key acquired (Index: {current_key_data['index']})")
                 bytes_encrypted_with_current_key = 0
 
             send_chunk_packet(transport, chunk, current_key_data)
@@ -52,51 +58,47 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
             bytes_encrypted_with_current_key += chunk["size"]
             total_bytes += chunk["size"]
 
-            if chunk["id"] % 5 == 0:
-                print(f"Sent chunk {chunk['id']}...", end='\r')
+            # Changed: No longer using '\r', using log_event for separate lines
+            if chunk["id"] % 50 == 0:
+                log_event(f"Sent chunk {chunk['id']} (Total: {total_bytes / 1024 / 1024:.2f} MB)")
 
     except Exception as e:
-        print(f"\nCritical Error: {e}")
+        log_event(f"Critical Error: {e}")
         import traceback
         traceback.print_exc()
     finally:
         fetcher.stop()
 
-    # The hash is finalized only after the loop completes
     final_hash = sha256_hash.hexdigest()
-    print(f"\nFinal File Hash: {final_hash}")
+    log_event(f"Final File Hash: {final_hash}")
 
-    print("Sending termination signal...")
+    log_event("Sending termination signal...")
     end_packet = create_termination_packet(final_hash)
     transport.send_reliable(end_packet)
 
     duration = time.time() - start_time
-    if duration == 0: duration = 0.001
-    mb_sec = (total_bytes / 1024 / 1024) / duration
-    print(f"Transfer complete. {total_bytes / 1024 / 1024:.2f} MB in {duration:.2f}s ({mb_sec:.2f} MB/s)")
+    mb_sec = (total_bytes / 1024 / 1024) / (duration if duration > 0 else 0.001)
+    log_event(f"Transfer complete. {total_bytes / 1024 / 1024:.2f} MB in {duration:.2f}s ({mb_sec:.2f} MB/s)")
 
-    print("\n[Protocol] Waiting for Receiver Confirmation (ACK)...")
+    log_event("Waiting for Receiver Confirmation (ACK)...")
     try:
         ack_data = transport.receive_packet()
         if ack_data:
             headers, _ = decode_packet_with_headers(ack_data)
             if headers.get("type") == "ACK":
                 status = headers.get("status", "UNKNOWN")
-                print(f"[Server Reply] Status: {status}")
+                log_event(f"[Server Reply] Status: {status}")
                 if status == "OK":
-                    print("Success: Integrity Verified.")
+                    log_event("Success: Integrity Verified.")
                 else:
-                    print("Failure: Receiver reported error.")
-            else:
-                print(f"Warning: Unexpected packet type {headers.get('type')}")
+                    log_event("Failure: Receiver reported error.")
         else:
-            print("Error: Connection closed by server before ACK.")
+            log_event("Error: Connection closed by server before ACK.")
     except Exception as e:
-        print(f"Error reading ACK: {e}")
+        log_event(f"Error reading ACK: {e}")
 
-    print("Sender exiting.")
+    log_event("Sender exiting.")
     transport.close()
-
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
