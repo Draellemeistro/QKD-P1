@@ -61,8 +61,8 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
             bytes_encrypted_with_current_key += chunk["size"]
             total_bytes += chunk["size"]
 
-            if chunk["id"] % 5 == 0:
-                print(f"Sent chunk {chunk['id']}...", end='\r')
+            #if chunk["id"] % 5 == 0:
+            #    print(f"Sent chunk {chunk['id']}...", end='\r')
 
     except Exception as e:
         print(f"\nCritical Error: {e}")

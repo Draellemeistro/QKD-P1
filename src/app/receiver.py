@@ -60,8 +60,8 @@ def process_single_packet(packet_dict, writer, sender_id, key_cache):
         writer.append(decrypted_str)
 
         # Log sparingly
-        if chunk_id % 50 == 0:
-            print(f"Processed chunk {chunk_id}...", end='\r')
+        #if chunk_id % 50 == 0:
+        #    print(f"Processed chunk {chunk_id}...", end='\r')
 
     except Exception as e:
         print(f"\nError processing chunk {chunk_id}: {e}")
