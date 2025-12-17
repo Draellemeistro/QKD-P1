@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y \
 
 # 2. Install Python Libraries
 # Added 'pyenet'
-RUN pip3 install requests python-dotenv cryptography pyenet flask
+RUN pip3 install requests python-dotenv cryptography pyenet flask xxhash
 
 WORKDIR /app
 
