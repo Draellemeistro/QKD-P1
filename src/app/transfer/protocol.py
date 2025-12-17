@@ -1,5 +1,15 @@
 from typing import Tuple, Dict
 
+def create_ack_packet(status="OK", message="Transfer Complete") -> bytes:
+    """Creates a confirmation packet to send back to the source."""
+    headers = {
+        "type": "ACK",
+        "status": status,
+        "message": message
+    }
+    # We reuse the existing encoding logic
+    return encode_packet_with_headers(headers, b"")
+
 def encode_packet_with_headers(headers: dict, data: bytes) -> bytes:
     """Encodes metadata as headers followed by data."""
     header_parts = [f"{k}:{v}" for k, v in headers.items()]

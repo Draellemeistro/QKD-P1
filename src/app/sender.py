@@ -1,12 +1,14 @@
 import time
 import sys
-import requests  # REQUIRED: To catch the 503 error
+import requests
+import enet  # REQUIRED: To use EVENT_TYPE_RECEIVE
 from src.app.kms_api import new_key
 from src.app.transfer.transport import Transport
 from src.app.file_utils import split_file_into_chunks, hash_file
 from src.app.crypto import encryption
 from src.app.transfer.network_utils import resolve_host
-from src.app.transfer.protocol import create_data_packet, create_termination_packet
+# UPDATE 1: Import decode helper to read the ACK
+from src.app.transfer.protocol import create_data_packet, create_termination_packet, decode_packet_with_headers
 
 # --- CONFIGURATION ---
 CHUNK_SIZE = 64 * 1024
@@ -15,7 +17,6 @@ CHUNK_SIZE = 64 * 1024
 KEY_ROTATION_SOFT_LIMIT = 1024 * 1024 * 1
 
 # 2. Hard Limit (Mandatory Rotation): Stop and wait here (e.g., 50 MB)
-# This prevents a single key from being used indefinitely if the link is down.
 KEY_ROTATION_HARD_LIMIT = 1024 * 1024 * 50
 
 
@@ -29,7 +30,6 @@ def establish_connection(ip, port):
 def fetch_key_blocking(receiver_id):
     """
     Helper: Enters a retry loop until a key is successfully obtained.
-    Used when we hit the Hard Limit or have no key at all.
     """
     while True:
         try:
@@ -40,18 +40,14 @@ def fetch_key_blocking(receiver_id):
                 time.sleep(1)
                 continue
             else:
-                raise e  # Critical error (e.g., 404, 500) -> Crash
+                raise e
 
 
 def ensure_valid_key(current_key, bytes_used, soft_limit, hard_limit, receiver_id):
     """
-    Adaptive Key Logic:
-    1. No Key? -> Block until we get one.
-    2. > Hard Limit? -> Block until we get a NEW one.
-    3. > Soft Limit? -> Try to get a new one. If 503, reuse current (Adapt).
+    Adaptive Key Logic with Soft/Hard limits.
     """
-
-    # Case A: We have no key at all (Start of transfer)
+    # Case A: No key
     if current_key is None:
         print("Initial key fetch...")
         return fetch_key_blocking(receiver_id)
@@ -60,7 +56,6 @@ def ensure_valid_key(current_key, bytes_used, soft_limit, hard_limit, receiver_i
     if bytes_used >= soft_limit:
         try:
             # Try to rotate (Optimistic)
-            # print(f"Soft limit hit ({bytes_used} bytes). Requesting new key...")
             return new_key(receiver_id)
 
         except requests.exceptions.HTTPError as e:
@@ -74,12 +69,9 @@ def ensure_valid_key(current_key, bytes_used, soft_limit, hard_limit, receiver_i
 
                 else:
                     # Case D: Adapt (Reuse Key)
-                    # We are in the 'Safety Zone' between Soft and Hard limits.
-                    # We print a warning but continue.
                     print(f" [i] Rate Limit (503). Extending key life (Used: {bytes_used / 1024:.0f} KB)")
                     return current_key
             else:
-                # Some other error (network down?)
                 raise e
 
     # Case E: Below Soft Limit -> Keep going
@@ -110,13 +102,12 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
 
     print(f"Starting transfer of {file_path}...")
     print(
-        f"Policy: Soft Limit={KEY_ROTATION_SOFT_LIMIT / 1024 / 1024}MB, Hard Limit={KEY_ROTATION_HARD_LIMIT / 1024 / 1024}MB")
+        f"Policy: Soft Limit={KEY_ROTATION_SOFT_LIMIT / 1024 / 1024:.1f}MB, Hard Limit={KEY_ROTATION_HARD_LIMIT / 1024 / 1024:.1f}MB")
 
     # 2. Streaming Loop
     for chunk in split_file_into_chunks(file_path, CHUNK_SIZE):
         try:
-            # A. Key Management (Updated with 2 limits)
-            # Store old ID to detect if rotation happened
+            # A. Key Management
             old_key_id = current_key_data["index"] if current_key_data else -1
 
             current_key_data = ensure_valid_key(
@@ -129,7 +120,6 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
 
             # Check if key actually changed
             if current_key_data["index"] != old_key_id:
-                # Key rotated (either purely soft, or after hard blocking)
                 bytes_encrypted_with_current_key = 0
 
             # B. Processing & Sending
@@ -157,6 +147,44 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
 
     duration = time.time() - start_time
     print(f"Transfer complete. {total_bytes / 1024 / 1024:.2f} MB in {duration:.2f}s")
+
+    # --- UPDATE 2: ROBUSTNESS / ACK WAITING ---
+    print("\n[Protocol] Waiting for Receiver Confirmation (ACK)...")
+
+    ack_received = False
+    start_wait = time.time()
+
+    # Wait up to 60s for the ACK (keeps ENet alive to resend dropped packets)
+    while time.time() - start_wait < 60:
+        event = transport.service(100)  # Pump network
+
+        if event.type == enet.EVENT_TYPE_RECEIVE:
+            try:
+                # We got a reply!
+                headers, _ = decode_packet_with_headers(event.packet.data)
+
+                # Check if it is our ACK
+                if headers.get("type") == "ACK":
+                    status = headers.get("status", "UNKNOWN")
+                    message = headers.get("message", "")
+                    print(f"\n[Server Reply] Status: {status} - {message}")
+
+                    if status == "OK":
+                        ack_received = True
+                        break  # Success! Exit loop.
+                    else:
+                        print("Warning: Receiver reported an error.")
+                        break  # Exit, but with failure state.
+
+            except Exception as e:
+                print(f"Ignored unexpected packet: {e}")
+
+    if not ack_received:
+        print("\n[Warning] Timed out waiting for ACK (Receiver might be slow or dead).")
+    else:
+        print("Transfer successfully confirmed by Receiver.")
+
+    print("Sender exiting.")
 
 
 if __name__ == "__main__":
