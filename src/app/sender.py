@@ -14,6 +14,7 @@ from src.app.transfer.protocol import create_data_packet, create_termination_pac
 CHUNK_SIZE = 1024 * 1024 * 4
 KEY_ROTATION_LIMIT = 1024 * 1024 * 100
 
+
 def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
     transport = TcpTransport(is_server=False)
     if not transport.connect(destination_ip, destination_port):
@@ -39,9 +40,13 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
         current_key_data = fetcher.get_next_key()
         log_event(f"Initial key acquired (Index: {current_key_data['index']})")
 
+        # Track when the loop starts to measure the very first acquisition
+        last_loop_time = time.time()
+
         for chunk in split_file_and_hash(file_path, CHUNK_SIZE, sha256_hash):
-            # Timing the start of this specific chunk iteration
-            chunk_proc_start = time.time()
+            # 1. Profile Data Acquisition (Disk I/O + Hashing)
+            # This is the time spent waiting for split_file_and_hash to yield
+            acquisition_time = time.time() - last_loop_time
 
             if bytes_encrypted_with_current_key >= KEY_ROTATION_LIMIT:
                 log_event("Rotating key...")
@@ -49,14 +54,15 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
                 log_event(f"New key acquired (Index: {current_key_data['index']})")
                 bytes_encrypted_with_current_key = 0
 
-            # 1. Profile Encryption
+            # 2. Profile Encryption
             enc_start = time.time()
             encrypted_payload = encryption.encrypt_AES256(chunk["data"], current_key_data["hexKey"])
             enc_duration = time.time() - enc_start
 
-            # 2. Profile Network Transmission
+            # 3. Profile Network Transmission
             net_start = time.time()
-            packet = create_data_packet(chunk["id"], current_key_data["blockId"], current_key_data["index"], encrypted_payload)
+            packet = create_data_packet(chunk["id"], current_key_data["blockId"], current_key_data["index"],
+                                        encrypted_payload)
             transport.send_reliable(packet)
             net_duration = time.time() - net_start
 
@@ -67,10 +73,14 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
             if chunk["id"] % 50 == 0:
                 log_event(
                     f"Chunk {chunk['id']} Metrics -> "
+                    f"Read/Hash: {acquisition_time:.4f}s | "
                     f"Encrypt: {enc_duration:.4f}s | "
                     f"Network: {net_duration:.4f}s | "
                     f"Total: {total_bytes / 1024 / 1024:.2f} MB"
                 )
+
+            # Reset the timer for the next iteration's acquisition
+            last_loop_time = time.time()
 
     except Exception as e:
         log_event(f"Critical Error: {e}")
@@ -107,6 +117,7 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
 
     log_event("Sender exiting.")
     transport.close()
+
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
