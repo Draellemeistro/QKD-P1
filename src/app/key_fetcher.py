@@ -10,7 +10,7 @@ class KeyFetcher:
     Background thread that pre-fetches keys so the Sender never waits.
     """
 
-    def __init__(self, receiver_id, buffer_size=5):
+    def __init__(self, receiver_id, buffer_size=10):
         self.receiver_id = receiver_id
         self.queue = queue.Queue(maxsize=buffer_size)
         self.running = True
