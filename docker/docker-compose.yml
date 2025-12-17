@@ -82,7 +82,7 @@ services:
       - ../data:/app/data # Assuming you have data here
     environment:
       # THE TRICK: Point KMS_URL to Node A's Proxy
-      - KMS_URL=http://node-a:5000
+      - KMS_URL=http://node-a:8095 #5000 for middleman
       - DIRECTORY_SERVICE_URL=http://172.18.0.10:5000
     command: tail -f /dev/null # Keep alive and dont run proxy
     networks:
@@ -102,7 +102,7 @@ services:
       - ../received_data:/app/received_data
     environment:
       # THE TRICK: Point KMS_URL to Node B's Proxy
-      - KMS_URL=http://node-b:5000
+      - KMS_URL=http://node-b:8095 #5000 for middleman
       - DIRECTORY_SERVICE_URL=http://172.18.0.10:5000
       - LISTEN_IP=0.0.0.0
       - LISTEN_PORT=12345
