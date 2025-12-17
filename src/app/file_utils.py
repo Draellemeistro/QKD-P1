@@ -1,15 +1,7 @@
 import os
 import hashlib
+import xxhash
 import mmap
-
-def split_file_and_hash(file_path, chunk_size_bytes, hash_obj):
-    """
-    Reads a file lazily and updates the provided hash object for each chunk.
-    This replaces the need to read the file twice.
-    """
-    for chunk in split_file_into_chunks(file_path, chunk_size_bytes):
-        hash_obj.update(chunk["data"])
-        yield chunk
 
 def split_file_into_chunks(file_path, chunk_size_bytes):
     """
@@ -63,27 +55,34 @@ class FileStreamWriter:
 
 # Verification
 
-def hash_file(file_path, hash_algorithm="sha256"):
+
+def split_file_and_hash_xxh(file_path, chunk_size_bytes, hash_obj):
     """
-    Computes hash using mmap for memory efficiency on large files.
+    Reads a file lazily and updates the provided xxhash object for each chunk.
+    Replaces the need to read the file twice.
     """
-    hash_func = hashlib.new(hash_algorithm)
+    for chunk in split_file_into_chunks(file_path, chunk_size_bytes):
+        hash_obj.update(chunk["data"])
+        yield chunk
+
+def hash_file_xxh(file_path):
+    """
+    Computes xxHash (64-bit) for memory efficiency on large files.
+    This is significantly faster than SHA-256 for integrity checks.
+    """
+    hasher = xxhash.xxh3_64()
     try:
         with open(file_path, "rb") as f:
-            # Handle empty files which crash mmap
             if os.path.getsize(file_path) == 0:
-                return hash_func.hexdigest()
-
-            with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
-                # Read in 64KB chunks from the memory map
-                while chunk := mm.read(65536):
-                    hash_func.update(chunk)
+                return hasher.hexdigest()
+            # Read in 64KB chunks to keep memory usage low
+            while chunk := f.read(65536):
+                hasher.update(chunk)
     except FileNotFoundError:
         return None
+    return hasher.hexdigest()
 
-    return hash_func.hexdigest()
-
-
-def validate_file_hash(file_path, expected_hash):
-    computed = hash_file(file_path)
+def validate_file_hash_xxh(file_path, expected_hash):
+    """Verifies file integrity using the fast xxHash algorithm."""
+    computed = hash_file_xxh(file_path)
     return computed == expected_hash

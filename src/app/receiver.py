@@ -2,7 +2,8 @@ import os
 from src.app.kms_api import get_key
 from src.app.transfer.tcp_transport import TcpTransport
 from src.app.crypto import encryption
-from src.app.file_utils import FileStreamWriter, validate_file_hash
+# UPDATED: Import the xxHash validation function
+from src.app.file_utils import FileStreamWriter, validate_file_hash_xxh
 from src.app.transfer.protocol import decode_packet_with_headers, create_ack_packet
 
 # Configuration
@@ -16,7 +17,6 @@ def start_server(ip, port):
     """
     Initializes the TCP listener.
     """
-    # Initialize TCP Server
     transport = TcpTransport(is_server=True, ip=ip, port=port)
     return transport
 
@@ -35,11 +35,9 @@ def process_single_packet(packet_dict, writer, sender_id, key_cache):
     chunk_id = packet_dict.get("chunk_id", -1)
 
     try:
-        # 1. Check Key Cache
         needed_key_id = (packet_dict["key_block_id"], packet_dict["key_index"])
 
         if key_cache.get("id") != needed_key_id:
-            # Fetch new key from KMS
             print(f"Fetching Decrypt Key (Block: {needed_key_id[0]}, Index: {needed_key_id[1]})...")
             key_metadata = get_decryption_key(
                 sender_id,
@@ -50,14 +48,9 @@ def process_single_packet(packet_dict, writer, sender_id, key_cache):
             key_cache["data"] = key_metadata
 
         current_key = key_cache["data"]
-
-        # 2. Decrypt
         decrypted_str = encryption.decrypt_AES256(packet_dict["data"], current_key["hexKey"])
-
-        # 3. Write
         writer.append(decrypted_str)
 
-        # Log sparingly
         if chunk_id % 50 == 0:
             print(f"Processed chunk {chunk_id}...", end='\r')
 
@@ -69,23 +62,19 @@ def run_reception_loop(transport, output_file, receiver_id):
     """
     Main TCP Event Loop.
     """
-    # Wait for Sender to Connect
     print(f"Receiver listening on {LISTEN_IP}:{LISTEN_PORT}...")
     client_conn = transport.accept()
     if not client_conn:
         print("Error: Accept failed.")
         return
 
-    # Initialize State
     key_cache = {"id": None, "data": None}
     received_hash = ""
 
-    # Open File Stream
     with FileStreamWriter(output_file) as writer:
         print(f"Connection established! Writing to {output_file}")
 
         while True:
-            # BLOCKING READ
             data = transport.receive_packet()
 
             if not data:
@@ -93,7 +82,6 @@ def run_reception_loop(transport, output_file, receiver_id):
                 break
 
             try:
-                # Parse Protocol
                 headers, encrypted_data = decode_packet_with_headers(data)
 
                 packet_dict = {
@@ -104,30 +92,28 @@ def run_reception_loop(transport, output_file, receiver_id):
                     "data": encrypted_data
                 }
 
-                # Handle Termination vs Data
                 if packet_dict["is_last"]:
                     received_hash = headers.get("file_hash", "")
-                    print(f"\nTermination packet received. (Remote Hash: {received_hash})")
-                    break  # Exit loop to verify and ACK
+                    print(f"\nTermination packet received. (Remote xxHash: {received_hash})")
+                    break
                 else:
                     process_single_packet(packet_dict, writer, receiver_id, key_cache)
 
             except (ValueError, UnicodeDecodeError) as e:
                 print(f"Error: Malformed packet: {e}")
 
-    # Verification and ACK
-    print("Verifying integrity...")
-    is_valid = validate_file_hash(output_file, received_hash)
+    # UPDATED: Use the high-speed xxHash verification
+    print("Verifying integrity with xxHash...")
+    is_valid = validate_file_hash_xxh(output_file, received_hash)
 
     status_code = "OK" if is_valid else "ERROR"
-    status_msg = "Integrity Verified" if is_valid else "Hash Mismatch"
+    status_msg = "Integrity Verified (xxHash)" if is_valid else "Hash Mismatch"
 
     if is_valid:
         print(f"SUCCESS: {status_msg}")
     else:
         print(f"WARNING: {status_msg}")
 
-    # Send ACK
     print(f"Sending ACK ({status_code})...")
     ack_data = create_ack_packet(status=status_code, message=status_msg)
     transport.send_reliable(ack_data)
