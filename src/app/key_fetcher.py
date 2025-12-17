@@ -23,15 +23,15 @@ class KeyFetcher:
     def _worker(self):
         while self.running:
             try:
-                # 1. If queue full, sleep briefly to save CPU
+                # If queue full, sleep briefly to save CPU
                 if self.queue.full():
                     time.sleep(0.005)
                     continue
 
-                # 2. Fetch from KMS (This is where the 15ms wait happens)
+                # Fetch from KMS 
                 key_data = new_key(self.receiver_id)
 
-                # 3. Add to buffer
+                # Add to buffer
                 self.queue.put(key_data)
 
             except Exception as e:

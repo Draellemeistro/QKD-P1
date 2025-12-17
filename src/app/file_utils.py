@@ -3,8 +3,6 @@ import hashlib
 import mmap
 
 
-# --- 1. Reading (Generator Pattern) ---
-
 def split_file_into_chunks(file_path, chunk_size_bytes):
     """
     Reads a file lazily in binary chunks.
@@ -27,9 +25,6 @@ def split_file_into_chunks(file_path, chunk_size_bytes):
     except FileNotFoundError:
         print(f"Error: File {file_path} not found.")
         return
-
-
-# --- 2. Writing (Streaming Pattern) ---
 
 class FileStreamWriter:
     """
@@ -56,10 +51,9 @@ class FileStreamWriter:
         """Write the next chunk of data to the file."""
         if self.file:
             self.file.write(data_bytes)
-            # self.file.flush() # Optional: slowing down but safer
 
 
-# --- 3. Verification ---
+# Verification
 
 def hash_file(file_path, hash_algorithm="sha256"):
     """

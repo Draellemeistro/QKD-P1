@@ -38,7 +38,7 @@ def new_key(receiver_id):
         blockId: Id of the block containing the key
     }
     """
-    # --- PROFILING START ---
+    # PROFILING START
     start_time = time.time()
     try:
         r = requests.post(endpoints["new_key"], params={"siteid": str(receiver_id)})
@@ -53,7 +53,7 @@ def new_key(receiver_id):
     except Exception as e:
         print(f" [Profile] KMS Request FAILED after {time.time() - start_time:.4f}s")
         raise e
-    # --- PROFILING END ---
+    # PROFILING END
 
 
 def get_key(receiver_id, block_id, index):
@@ -78,7 +78,7 @@ def get_key(receiver_id, block_id, index):
     kms_url = endpoints["get_key"]
     params = {"siteid": str(receiver_id), "index": str(index), "blockid": str(block_id)}
 
-    # --- PROFILING START ---
+    # PROFILING START
     start_time = time.time()
     try:
         r = requests.post(kms_url, params=params)
@@ -94,4 +94,4 @@ def get_key(receiver_id, block_id, index):
     except Exception as e:
         # print(f" [Profile] KMS GET Request FAILED after {time.time() - start_time:.4f}s")
         raise e
-    # --- PROFILING END ---
+    # PROFILING END

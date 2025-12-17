@@ -1,8 +1,6 @@
 import time
 import sys
-import requests
 
-# USE TCP (Standard, Reliable)
 from src.app.transfer.tcp_transport import TcpTransport
 from src.app.key_fetcher import KeyFetcher
 from src.app.file_utils import split_file_into_chunks, hash_file
@@ -10,7 +8,7 @@ from src.app.crypto import encryption
 from src.app.transfer.network_utils import resolve_host
 from src.app.transfer.protocol import create_data_packet, create_termination_packet, decode_packet_with_headers
 
-# --- CONFIGURATION ---
+# CONFIGURATION
 CHUNK_SIZE = 1024 * 1024 * 1  # 1 MB Chunks
 KEY_ROTATION_LIMIT = 1024 * 1024 * 10  # 10 MB Rotation
 
@@ -22,13 +20,13 @@ def send_chunk_packet(transport, chunk, key_data):
 
 
 def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
-    # 1. Setup TCP Transport
+    # Setup TCP Transport
     transport = TcpTransport(is_server=False)
     if not transport.connect(destination_ip, destination_port):
         print(f"Error: Could not connect to {destination_ip}:{destination_port}")
         return
 
-    # 2. Setup Key Fetcher
+    # Setup Key Fetcher
     fetcher = KeyFetcher(receiver_id)
 
     print(f"Calculating hash for {file_path}...")
@@ -42,10 +40,10 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
     start_time = time.time()
 
     try:
-        # Get first key (Immediate)
+        # Get first key
         current_key_data = fetcher.get_next_key()
 
-        # 3. Streaming Loop
+        # Streaming Loop
         for chunk in split_file_into_chunks(file_path, CHUNK_SIZE):
 
             # Rotation Logic
@@ -53,16 +51,14 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
                 current_key_data = fetcher.get_next_key()
                 bytes_encrypted_with_current_key = 0
 
-            # Encrypt & Send
+            # Encrypt and Send
             send_chunk_packet(transport, chunk, current_key_data)
-
-            # Note: No transport.service() needed for TCP
 
             bytes_encrypted_with_current_key += chunk["size"]
             total_bytes += chunk["size"]
 
-            #if chunk["id"] % 5 == 0:
-            #    print(f"Sent chunk {chunk['id']}...", end='\r')
+            if chunk["id"] % 5 == 0:
+                print(f"Sent chunk {chunk['id']}...", end='\r')
 
     except Exception as e:
         print(f"\nCritical Error: {e}")
@@ -72,7 +68,7 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
     finally:
         fetcher.stop()
 
-    # 4. Termination & ACK
+    # Termination and ACK
     print("\nSending termination signal...")
     end_packet = create_termination_packet(file_hash)
     transport.send_reliable(end_packet)
@@ -82,7 +78,7 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
     mb_sec = (total_bytes / 1024 / 1024) / duration
     print(f"Transfer complete. {total_bytes / 1024 / 1024:.2f} MB in {duration:.2f}s ({mb_sec:.2f} MB/s)")
 
-    # 5. Wait for ACK (TCP Blocking Read)
+    # Wait for ACK (TCP Blocking Read)
     print("\n[Protocol] Waiting for Receiver Confirmation (ACK)...")
 
     try:
@@ -107,7 +103,7 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
         print(f"Error reading ACK: {e}")
 
     print("Sender exiting.")
-    transport.close()  # Now this works because TcpTransport has .close()
+    transport.close()
 
 
 if __name__ == "__main__":

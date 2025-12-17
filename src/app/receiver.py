@@ -1,7 +1,5 @@
 import os
-import sys
 from src.app.kms_api import get_key
-# CHANGED: Use the TCP Transport we verified
 from src.app.transfer.tcp_transport import TcpTransport
 from src.app.crypto import encryption
 from src.app.file_utils import FileStreamWriter, validate_file_hash
@@ -42,7 +40,7 @@ def process_single_packet(packet_dict, writer, sender_id, key_cache):
 
         if key_cache.get("id") != needed_key_id:
             # Fetch new key from KMS
-            # print(f"Fetching Decrypt Key (Block: {needed_key_id[0]}, Index: {needed_key_id[1]})...")
+            print(f"Fetching Decrypt Key (Block: {needed_key_id[0]}, Index: {needed_key_id[1]})...")
             key_metadata = get_decryption_key(
                 sender_id,
                 packet_dict["key_block_id"],
@@ -60,8 +58,8 @@ def process_single_packet(packet_dict, writer, sender_id, key_cache):
         writer.append(decrypted_str)
 
         # Log sparingly
-        #if chunk_id % 50 == 0:
-        #    print(f"Processed chunk {chunk_id}...", end='\r')
+        if chunk_id % 50 == 0:
+            print(f"Processed chunk {chunk_id}...", end='\r')
 
     except Exception as e:
         print(f"\nError processing chunk {chunk_id}: {e}")
@@ -71,7 +69,7 @@ def run_reception_loop(transport, output_file, receiver_id):
     """
     Main TCP Event Loop.
     """
-    # 1. Wait for Sender to Connect
+    # Wait for Sender to Connect
     print(f"Receiver listening on {LISTEN_IP}:{LISTEN_PORT}...")
     client_conn = transport.accept()
     if not client_conn:
@@ -87,7 +85,7 @@ def run_reception_loop(transport, output_file, receiver_id):
         print(f"Connection established! Writing to {output_file}")
 
         while True:
-            # 2. BLOCKING READ (No CPU spin)
+            # BLOCKING READ
             data = transport.receive_packet()
 
             if not data:
@@ -95,7 +93,7 @@ def run_reception_loop(transport, output_file, receiver_id):
                 break
 
             try:
-                # 3. Parse Protocol
+                # Parse Protocol
                 headers, encrypted_data = decode_packet_with_headers(data)
 
                 packet_dict = {
@@ -106,18 +104,18 @@ def run_reception_loop(transport, output_file, receiver_id):
                     "data": encrypted_data
                 }
 
-                # 4. Handle Termination vs Data
+                # Handle Termination vs Data
                 if packet_dict["is_last"]:
                     received_hash = headers.get("file_hash", "")
                     print(f"\nTermination packet received. (Remote Hash: {received_hash})")
-                    break  # Exit loop to verify & ACK
+                    break  # Exit loop to verify and ACK
                 else:
                     process_single_packet(packet_dict, writer, receiver_id, key_cache)
 
             except (ValueError, UnicodeDecodeError) as e:
                 print(f"Error: Malformed packet: {e}")
 
-    # --- Verification & ACK ---
+    # Verification and ACK
     print("Verifying integrity...")
     is_valid = validate_file_hash(output_file, received_hash)
 
