@@ -1,21 +1,18 @@
 import threading
 import queue
 import time
+import datetime
 from src.app.kms_api import new_key
-
 
 class KeyFetcher:
     """
     KMS Client-Side Buffer.
     Background thread that pre-fetches keys so the Sender never waits.
     """
-
     def __init__(self, receiver_id, buffer_size=100):
         self.receiver_id = receiver_id
         self.queue = queue.Queue(maxsize=buffer_size)
         self.running = True
-
-        # Start background worker
         self.thread = threading.Thread(target=self._worker, daemon=True)
         self.thread.start()
         print(f" [KeyFetcher] Background thread started for Site: {receiver_id}")
@@ -23,25 +20,26 @@ class KeyFetcher:
     def _worker(self):
         while self.running:
             try:
-                # If queue full, sleep briefly to save CPU
                 if self.queue.full():
                     time.sleep(0.005)
                     continue
 
-                # Fetch from KMS
+                start_time = time.time()
                 key_data = new_key(self.receiver_id)
+                duration = time.time() - start_time
 
-                # Add to buffer
+                # Only log if the KMS is slow enough to threaten the pipeline (>100ms)
+                if duration > 0.1:
+                    timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                    print(f"[{timestamp}] [WARNING] Slow KMS Request: {duration:.4f}s")
+
                 self.queue.put(key_data)
-
             except Exception as e:
-                # Log error but retry
                 print(f" [KeyFetcher] Error: {e}")
                 time.sleep(1)
 
     def get_next_key(self):
         """Returns a key instantly from memory."""
-        # Blocks ONLY if the KMS is physically too slow (Buffer Empty)
         return self.queue.get()
 
     def stop(self):
