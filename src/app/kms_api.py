@@ -1,7 +1,7 @@
 import requests
 from dotenv import load_dotenv
 import os
-import time  # <--- ADDED
+import time
 
 """
 load_dotenv()  # NOTE: ikke sikker på hvor .env burde ligge i forhold til app og nodes
@@ -24,6 +24,10 @@ endpoints = {
     "new_key": kms_server_ip + "/api/newkey",
 }
 
+# --- OPTIMIZATION: Persistent Session ---
+# Initializes a single TCP connection pool to reuse sockets (HTTP Keep-Alive)
+session = requests.Session()
+# ----------------------------------------
 
 def new_key(receiver_id):
     """
@@ -38,22 +42,23 @@ def new_key(receiver_id):
         blockId: Id of the block containing the key
     }
     """
-    # --- PROFILING START ---
+    # PROFILING START
     start_time = time.time()
     try:
-        r = requests.post(endpoints["new_key"], params={"siteid": str(receiver_id)})
+        # Use session.post instead of requests.post
+        r = session.post(endpoints["new_key"], params={"siteid": str(receiver_id)})
         r.raise_for_status()  # Raise an error for bad responses (4xx and 5xx)
 
         duration = time.time() - start_time
         # Log purely the network/KMS wait time
-        print(f" [Profile] KMS HTTP Request took: {duration:.4f}s")
+        #print(f" [Profile] KMS HTTP Request took: {duration:.4f}s")
 
         return r.json()
 
     except Exception as e:
         print(f" [Profile] KMS Request FAILED after {time.time() - start_time:.4f}s")
         raise e
-    # --- PROFILING END ---
+    # PROFILING END
 
 
 def get_key(receiver_id, block_id, index):
@@ -78,10 +83,11 @@ def get_key(receiver_id, block_id, index):
     kms_url = endpoints["get_key"]
     params = {"siteid": str(receiver_id), "index": str(index), "blockid": str(block_id)}
 
-    # --- PROFILING START ---
+    # PROFILING START
     start_time = time.time()
     try:
-        r = requests.post(kms_url, params=params)
+        # Use session.post instead of requests.post
+        r = session.post(kms_url, params=params)
         r.raise_for_status()  # Raise an error for bad responses (4xx and 5xx)
 
         duration = time.time() - start_time
@@ -94,4 +100,4 @@ def get_key(receiver_id, block_id, index):
     except Exception as e:
         # print(f" [Profile] KMS GET Request FAILED after {time.time() - start_time:.4f}s")
         raise e
-    # --- PROFILING END ---
+    # PROFILING END
