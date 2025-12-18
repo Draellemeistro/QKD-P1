@@ -28,7 +28,6 @@ def process_single_packet(packet_dict, writer, sender_id, key_cache):
         needed_key_id = (packet_dict["key_block_id"], packet_dict["key_index"])
 
         if key_cache.get("id") != needed_key_id:
-            # print(f"[Receiver] Chunk {chunk_id} | Rotating Key -> Block: {needed_key_id[0]}, Index: {needed_key_id[1]}")
             key_metadata = get_decryption_key(
                 sender_id,
                 packet_dict["key_block_id"],
@@ -43,9 +42,10 @@ def process_single_packet(packet_dict, writer, sender_id, key_cache):
         current_key = key_cache["data"]
         hex_key = current_key.get("hexKey", "UNKNOWN")
 
-        # --- DEBUG PRINT ADDED HERE ---
-        print(f"DEBUG: Chunk {chunk_id} | Key [{needed_key_id[0]}:{needed_key_id[1]}] = {hex_key}")
-        # ------------------------------
+        # --- DEBUG PRINT FOR COMPARISON ---
+        # Compare this output with your sender logs
+        print(f"DEBUG: Chunk {chunk_id} | Key [{needed_key_id[0]} : {needed_key_id[1]}] = {hex_key}")
+        # ----------------------------------
 
         decrypted_str = encryption.decrypt_AES256(packet_dict["data"], hex_key)
         writer.append(decrypted_str)
@@ -78,14 +78,17 @@ def run_reception_loop(transport, output_file, receiver_id):
             try:
                 headers, encrypted_data = decode_packet_with_headers(data)
 
-                # Ensure headers are Integers so KMS works correctly
+                # --- FIXED CASTING HERE ---
                 packet_dict = {
                     "chunk_id": int(headers.get("chunk_id", -1)),
-                    "key_block_id": int(headers.get("key_block_id", 0)),
+                    # Keep as string (UUID)
+                    "key_block_id": headers.get("key_block_id"),
+                    # Keep as int (Index)
                     "key_index": int(headers.get("key_index", 0)),
                     "is_last": headers.get("is_last", False),
                     "data": encrypted_data
                 }
+                # --------------------------
 
                 if packet_dict["is_last"]:
                     received_hash = headers.get("file_hash", "")
