@@ -4,7 +4,7 @@ import xxhash
 import datetime
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from queue import Queue
+from collections import deque  # IMPORTED: For the sliding window
 
 from src.app.transfer.tcp_transport import TcpTransport
 from src.app.key_fetcher import KeyFetcher
@@ -16,7 +16,7 @@ from src.app.transfer.protocol import create_data_packet, create_termination_pac
 # CONFIGURATION FOR 2GBPS+ PIPELINE
 CHUNK_SIZE = 1024 * 1024 * 4
 KEY_ROTATION_LIMIT = 1024 * 1024 * 500
-MAX_PIPELINE_DEPTH = 64  # Increased depth for higher speeds
+MAX_PIPELINE_DEPTH = 64  # Controls memory usage
 
 
 class PipelineMetrics:
@@ -42,13 +42,26 @@ class PipelineMetrics:
             return avg_r, avg_e, avg_n
 
 
+def encrypt_chunk_task(chunk, key_data):
+    """
+    Helper function run by ThreadPoolExecutor.
+    Perform encryption and packet creation off the main thread.
+    """
+    e_start = time.time()
+    encrypted_payload = encryption.encrypt_AES256(chunk["data"], key_data["hexKey"])
+    e_duration = time.time() - e_start
+
+    packet = create_data_packet(chunk["id"], key_data["blockId"], key_data["index"], encrypted_payload)
+    return packet, chunk["size"], e_duration
+
+
 def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
     transport = TcpTransport(is_server=False)
     if not transport.connect(destination_ip, destination_port):
         print(f"Error: Could not connect to {destination_ip}:{destination_port}")
         return
 
-    fetcher = KeyFetcher(receiver_id, buffer_size=500)  # Larger buffer for 2Gbps
+    fetcher = KeyFetcher(receiver_id, buffer_size=500)
     xxh_hasher = xxhash.xxh3_64()
     metrics = PipelineMetrics()
 
@@ -56,97 +69,81 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
         timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
         print(f"[{timestamp}] {msg}")
 
-    log_event(f"Starting 2Gbps Pipelined Transfer for {file_path}...")
+    log_event(f"Starting Ordered 2Gbps Transfer for {file_path}...")
 
-    encryption_queue = Queue(maxsize=MAX_PIPELINE_DEPTH)
-    network_queue = Queue(maxsize=MAX_PIPELINE_DEPTH)
+    # SLIDING WINDOW STATE
+    pending_futures = deque()
     start_time = time.time()
     total_bytes = 0
 
-    def encryption_worker():
-        while True:
-            item = encryption_queue.get()
-            try:
-                if item is None:
-                    # FIX: Do NOT signal network_queue here. Just exit.
-                    break
+    try:
+        log_event("Fetching initial key...")
+        current_key_data = fetcher.get_next_key()
+        bytes_sent_with_current_key = 0
+        last_chunk_time = time.time()
 
-                chunk, key_data, r_dur = item
-                e_start = time.time()
-                encrypted_payload = encryption.encrypt_AES256(chunk["data"], key_data["hexKey"])
-                e_duration = time.time() - e_start
+        # We use a context manager for the pool to ensure clean shutdown
+        with ThreadPoolExecutor(max_workers=12) as executor:
 
-                packet = create_data_packet(chunk["id"], key_data["blockId"], key_data["index"], encrypted_payload)
-                network_queue.put((packet, r_dur, e_duration))
-            finally:
-                encryption_queue.task_done()
+            # STAGE 1: PRODUCER LOOP
+            for chunk in split_file_and_hash_xxh(file_path, CHUNK_SIZE, xxh_hasher):
+                r_duration = time.time() - last_chunk_time
 
-    def network_worker():
-        while True:
-            item = network_queue.get()
-            try:
-                if item is None:
-                    break
-                packet, r_dur, e_dur = item
+                # Key Rotation Logic
+                if bytes_sent_with_current_key >= KEY_ROTATION_LIMIT:
+                    current_key_data = fetcher.get_next_key()
+                    bytes_sent_with_current_key = 0
+
+                # 1. Submit Encryption Task (Non-blocking)
+                future = executor.submit(encrypt_chunk_task, chunk, current_key_data)
+
+                # 2. Add to Sliding Window (Preserves Order)
+                # We store the future AND the read_duration for metrics reporting later
+                pending_futures.append((future, r_duration))
+
+                # 3. Maintain Window Size (Flow Control)
+                if len(pending_futures) >= MAX_PIPELINE_DEPTH:
+                    # Retrieve the OLDEST task. This forces us to wait for Chunk N
+                    # before sending Chunk N+1, even if N+1 finished encrypting first.
+                    oldest_future, r_dur_old = pending_futures.popleft()
+
+                    # BLOCK until this specific chunk is ready
+                    packet, size, e_dur = oldest_future.result()
+
+                    # Send Packet (Main thread guarantees sequential network writes)
+                    n_start = time.time()
+                    transport.send_reliable(packet)
+                    n_duration = time.time() - n_start
+
+                    metrics.report(r_dur_old, e_dur, n_duration)
+
+                # Update counters
+                bytes_sent_with_current_key += chunk["size"]
+                total_bytes += chunk["size"]
+
+                if chunk["id"] % 50 == 0:
+                    avg_r, avg_e, avg_n = metrics.get_averages()
+                    log_event(
+                        f"Progress: {total_bytes / 1024 / 1024:.1f}MB | Avg Read: {avg_r:.4f}s | Avg Enc: {avg_e:.4f}s | Avg Net: {avg_n:.4f}s")
+
+                last_chunk_time = time.time()
+
+            # STAGE 2: FLUSH WINDOW
+            log_event("Flushing remaining encryption tasks...")
+            while pending_futures:
+                oldest_future, r_dur_old = pending_futures.popleft()
+                packet, size, e_dur = oldest_future.result()
 
                 n_start = time.time()
                 transport.send_reliable(packet)
                 n_duration = time.time() - n_start
 
-                metrics.report(r_dur, e_dur, n_duration)
-            finally:
-                network_queue.task_done()
-
-    # Launch 12 Encryption Threads (for 16 VCPU) + 1 Network Thread
-    executor = ThreadPoolExecutor(max_workers=13)
-    for _ in range(12): executor.submit(encryption_worker)
-    executor.submit(network_worker)
-
-    try:
-        log_event("Fetching initial key...")
-        current_key_data = fetcher.get_next_key()
-
-        bytes_sent_with_current_key = 0
-        last_chunk_time = time.time()
-
-        # STAGE 1: PRODUCER
-        for chunk in split_file_and_hash_xxh(file_path, CHUNK_SIZE, xxh_hasher):
-            r_duration = time.time() - last_chunk_time
-
-            if bytes_sent_with_current_key >= KEY_ROTATION_LIMIT:
-                current_key_data = fetcher.get_next_key()
-                bytes_sent_with_current_key = 0
-
-            encryption_queue.put((chunk, current_key_data, r_duration))
-            bytes_sent_with_current_key += chunk["size"]
-            total_bytes += chunk["size"]
-
-            if chunk["id"] % 50 == 0:
-                avg_r, avg_e, avg_n = metrics.get_averages()
-                log_event(
-                    f"Progress: {total_bytes / 1024 / 1024:.1f}MB | Avg Read/Hash: {avg_r:.4f}s | Avg Enc: {avg_e:.4f}s | Avg Net: {avg_n:.4f}s")
-
-            last_chunk_time = time.time()
-
-        # STAGE 2: FLUSH ENCRYPTION
-        log_event("Flushing encryption queue...")
-        # Send stop signal to all 12 workers
-        for _ in range(12): encryption_queue.put(None)
-
-        # BLOCK until all encryption is 100% finished
-        encryption_queue.join()
-
-        # STAGE 3: FLUSH NETWORK
-        log_event("Flushing network queue...")
-        # Now that encryption is empty, we know network_queue has ALL data packets
-        network_queue.put(None)
-        network_queue.join()
-
-        # Shutdown threads cleanly
-        executor.shutdown(wait=True)
+                metrics.report(r_dur_old, e_dur, n_duration)
 
     except Exception as e:
         log_event(f"Critical Error: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
         fetcher.stop()
 
