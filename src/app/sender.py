@@ -24,7 +24,7 @@ class TransferConfig:
     key_rotation_limit: int = 1024 * 1024 * 2
     pipeline_depth: int = 64
     max_workers: int = 12
-    receiver_buffer: int = 500
+    receiver_buffer: int = 100
 
 
 # --- Metrics ---
