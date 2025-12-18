@@ -47,6 +47,8 @@ def encrypt_chunk_task(chunk, key_data):
     Helper function run by ThreadPoolExecutor.
     Perform encryption and packet creation off the main thread.
     """
+    short_key = key_data["hexKey"][:8]
+    print(f"[Sender] Chunk {chunk['id']} | Block: {key_data['blockId']} | Index: {key_data['index']} | KeyHex: {short_key}...")
     e_start = time.time()
     encrypted_payload = encryption.encrypt_AES256(chunk["data"], key_data["hexKey"])
     e_duration = time.time() - e_start
