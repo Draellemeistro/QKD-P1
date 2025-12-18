@@ -7,8 +7,6 @@ from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, Future
 from collections import deque
 from typing import Tuple, Deque, Optional
-
-# Mock imports for context (Keep your existing imports)
 from src.app.transfer.tcp_transport import TcpTransport
 from src.app.key_fetcher import KeyFetcher
 from src.app.file_utils import split_file_and_hash_xxh
