@@ -15,7 +15,7 @@ from src.app.transfer.protocol import create_data_packet, create_termination_pac
 
 # CONFIGURATION FOR 2GBPS+ PIPELINE
 CHUNK_SIZE = 1024 * 1024 * 4
-KEY_ROTATION_LIMIT = 1024 * 1024 * 500
+KEY_ROTATION_LIMIT = 1024 * 1024 * 2
 MAX_PIPELINE_DEPTH = 64  # Controls memory usage
 
 
