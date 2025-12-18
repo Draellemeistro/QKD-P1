@@ -38,7 +38,7 @@ def process_single_packet(packet_dict, writer, sender_id, key_cache):
         needed_key_id = (packet_dict["key_block_id"], packet_dict["key_index"])
 
         if key_cache.get("id") != needed_key_id:
-            print(f"Fetching Decrypt Key (Block: {needed_key_id[0]}, Index: {needed_key_id[1]})...")
+            print(f"Reciever] Chunk {chunk_id} | Fetching Decrypt Key (Block: {needed_key_id[0]}, Index: {needed_key_id[1]})...")
             key_metadata = get_decryption_key(
                 sender_id,
                 packet_dict["key_block_id"],
@@ -50,6 +50,8 @@ def process_single_packet(packet_dict, writer, sender_id, key_cache):
         current_key = key_cache["data"]
         decrypted_str = encryption.decrypt_AES256(packet_dict["data"], current_key["hexKey"])
         writer.append(decrypted_str)
+        key_hex = current_key.hex() if isinstance(current_key, bytes) else "NOT_BYTES"
+        print( f"[Receiver] Chunk {chunk_id} | Block: {needed_key_id[0]} | Index: {needed_key_id[1]} | KeyHex: {key_hex[:10]}...")
 
         if chunk_id % 50 == 0:
             print(f"Processed chunk {chunk_id}...", end='\r')
