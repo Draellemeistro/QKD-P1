@@ -1,7 +1,6 @@
 import time
 import sys
 import requests
-# REMOVED: from src.app.transfer.transport import Transport (Old ENet)
 from src.app.transfer.tcp_transport import TcpTransport
 from src.app.kms_api import new_key
 from src.app.file_utils import split_file_into_chunks, hash_file
@@ -56,13 +55,6 @@ def ensure_valid_key(current_key, bytes_used, soft_limit, hard_limit, receiver_i
     return current_key
 
 
-def send_chunk_packet(transport, chunk, key_data):
-    encrypted_payload = encryption.encrypt_AES256(chunk["data"], key_data["hexKey"])
-    packet = create_data_packet(chunk["id"], key_data["blockId"], key_data["index"], encrypted_payload)
-    # TCP Update: send_reliable now just writes to the socket stream
-    transport.send_reliable(packet)
-
-
 def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
     # 1. Setup
     transport = establish_connection(destination_ip, destination_port)
@@ -71,20 +63,27 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
         return
 
     print(f"Calculating hash for {file_path}...")
+    # Note: Hashing is deliberately excluded from transfer performance metrics
     file_hash = hash_file(file_path)
     print(f"File Hash (SHA-256): {file_hash}")
 
     current_key_data = None
     bytes_encrypted_with_current_key = 0
     total_bytes = 0
-    start_time = time.time()
+
+    # --- PERFORMANCE TIMERS ---
+    t_key_fetch = 0.0
+    t_encryption = 0.0
+    t_network_send = 0.0
 
     print(f"Starting transfer of {file_path}...")
+    start_time = time.time()
 
     # 2. Streaming Loop
     for chunk in split_file_into_chunks(file_path, CHUNK_SIZE):
         try:
             # A. Key Management
+            t0 = time.time()
             old_key_id = current_key_data["index"] if current_key_data else -1
             current_key_data = ensure_valid_key(
                 current_key_data,
@@ -93,15 +92,27 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
                 KEY_ROTATION_HARD_LIMIT,
                 receiver_id
             )
+            t_key_fetch += (time.time() - t0)
 
             if current_key_data["index"] != old_key_id:
                 bytes_encrypted_with_current_key = 0
 
-            # B. Processing & Sending
-            send_chunk_packet(transport, chunk, current_key_data)
+            # B. Processing (Encryption)
+            # Inlined logic from send_chunk_packet to measure encryption separately
+            t0 = time.time()
+            encrypted_payload = encryption.encrypt_AES256(chunk["data"], current_key_data["hexKey"])
+            packet = create_data_packet(
+                chunk["id"],
+                current_key_data["blockId"],
+                current_key_data["index"],
+                encrypted_payload
+            )
+            t_encryption += (time.time() - t0)
 
-            # REMOVED: transport.service(0) -> Not needed for TCP
-            # REMOVED: time.sleep() -> Not needed, TCP handles flow control automatically
+            # C. Network Send
+            t0 = time.time()
+            transport.send_reliable(packet)
+            t_network_send += (time.time() - t0)
 
             # D. State Update
             bytes_encrypted_with_current_key += chunk["size"]
@@ -122,13 +133,26 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
     end_packet = create_termination_packet(file_hash)
     transport.send_reliable(end_packet)
 
-    duration = time.time() - start_time
-    print(f"Transfer complete. {total_bytes / 1024 / 1024:.2f} MB in {duration:.2f}s")
+    total_duration = time.time() - start_time
+    mb_sent = total_bytes / 1024 / 1024
+
+    # --- PERFORMANCE REPORT ---
+    print("\n" + "=" * 40)
+    print(f"TRANSFER COMPLETE: {mb_sent:.2f} MB in {total_duration:.2f}s")
+    print(f"Throughput:      {(mb_sent * 8) / total_duration:.2f} Mbps")
+    print("-" * 40)
+    print("TIME BREAKDOWN:")
+    print(f"  KMS Fetching:  {t_key_fetch:.4f} s ({(t_key_fetch / total_duration) * 100:.1f}%)")
+    print(f"  Encryption:    {t_encryption:.4f} s ({(t_encryption / total_duration) * 100:.1f}%)")
+    print(f"  Network Send:  {t_network_send:.4f} s ({(t_network_send / total_duration) * 100:.1f}%)")
+
+    t_other = total_duration - (t_key_fetch + t_encryption + t_network_send)
+    print(f"  Disk/Overhead: {t_other:.4f} s ({(t_other / total_duration) * 100:.1f}%)")
+    print("=" * 40 + "\n")
 
     # --- UPDATE: TCP ACK WAITING ---
-    print("\n[Protocol] Waiting for Receiver Confirmation (ACK)...")
+    print("[Protocol] Waiting for Receiver Confirmation (ACK)...")
 
-    # In TCP, we don't loop for events. We just block-read the next packet.
     try:
         ack_data = transport.receive_packet()  # This blocks until data arrives
 
