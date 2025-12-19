@@ -5,7 +5,21 @@ from src.app.file_utils import load_file_contents, save_file_contents, split_fil
     hash_file, get_sorted_chunk_files, reassemble_file
 
 def test_split_file_into_chunks(tmp_path):
+    # 1. Create a dummy file (100 bytes)
+    file_path = tmp_path / "test_split.bin"
+    data = b"x" * 100
+    file_path.write_bytes(data)
 
+    # 2. Split into chunks of 30 bytes
+    chunk_size = 30
+    chunks = list(split_file_into_chunks(file_path, chunk_size))
+
+    # 3. Assertions
+    assert len(chunks) == 4  # 30 + 30 + 30 + 10 = 100 bytes
+    assert chunks[0]["data"] == b"x" * 30
+    assert chunks[3]["data"] == b"x" * 10  # Last chunk is smaller
+    assert chunks[0]["id"] == 0
+    assert chunks[3]["id"] == 3
 
 
 

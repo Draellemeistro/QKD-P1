@@ -1,100 +1,94 @@
-from unittest.mock import patch
-from src.app.crypto.keylogic import (
-    refresh_key_block,
-    refresh_key,
-    encrypt_chunk,
-    encrypt_all_chunks,
-)
-import src.app.crypto.encryption as encryption
+import pytest
+from src.app.crypto import encryption
 
-
-def test_refresh_key_block():
-    assert refresh_key_block(0, 100) is True
-    assert refresh_key_block(100, 100) is True
-    assert refresh_key_block(150, 100) is False
-    assert refresh_key_block(200, 100) is True
-
-
-def test_refresh_key():
-    assert refresh_key(0, 1024) is True
-    assert refresh_key(1024, 1024) is True
-    assert refresh_key(512, 1024) is False
-
-
-def test_encrypt_chunk():
-    chunk = {"id": 1, "data": b"testdata", "size": 512}
-    key = b"testkey"
-
-    with patch.object(
-        encryption, "encrypt_AES256", return_value=b"encrypteddata"
-    ) as mock_encrypt:
-        encrypted_data = encrypt_chunk(chunk, key)
-        mock_encrypt.assert_called_once_with(chunk["data"], key)
-        assert encrypted_data == b"encrypteddata"
-
-
-def test_encrypt_all_chunks():
-    chunks = [
-        {"id": 1, "data": b"data1", "size": 1024 * 1024},
-        {"id": 2, "data": b"data2", "size": 600000},
-        {"id": 3, "data": b"data3", "size": 700000},
-    ]
-    keys = [b"key1", b"key2"]
-
-    with patch.object(
-        encryption, "encrypt_AES256", side_effect=[b"enc1", b"enc2", b"enc3"]
-    ) as mock_encrypt:
-        encrypted_chunks = encrypt_all_chunks(chunks, keys)
-        assert len(encrypted_chunks) == 3
-        assert encrypted_chunks[0]["data"] == b"enc1"
-        assert encrypted_chunks[1]["data"] == b"enc2"  # represents error
-        assert encrypted_chunks[2]["data"] == b"enc3"
-        assert mock_encrypt.call_count == 3
-
-
-def test_key_logic():
-    test_refresh_key_block()
-    test_refresh_key()
-    test_encrypt_chunk()
-    test_encrypt_all_chunks()
+# Constants defined in your encryption.py
+IV_SIZE = 12
+TAG_SIZE = 16
+VALID_HEX_KEY = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
 
 
 def test_derive_AES256_key():
-    hex_key = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
-    expected_bytes = bytes.fromhex(hex_key)
-    hex_from_bytes = bytes.hex(expected_bytes)
-    if hex_key != hex_from_bytes:
-        raise ValueError("Hex key conversion mismatch")
+    """
+    Unit Test: Verifies that the helper function correctly converts
+    a hex string into the 32 bytes required for AES-256.
+    """
+    expected_bytes = bytes.fromhex(VALID_HEX_KEY)
+    derived_key = encryption.derive_AES256_key(VALID_HEX_KEY)
 
-    derived_key = encryption.derive_AES256_key(hex_key)
     assert derived_key == expected_bytes
+    assert len(derived_key) == 32
 
 
-def test_AES256_encryption_decryption():
-    test_AES256_CBC()
-    test_AES256_ECB()
+def test_encrypt_decrypt_success():
+    """
+    Unit Test: Verifies the 'Happy Path'.
+    Data encrypted with a key must be decryptable by the same key.
+    """
+    plaintext = b"Patient Record: Critical Condition - ID 12345"
 
+    # 1. Encrypt
+    encrypted_payload = encryption.encrypt_AES256(plaintext, VALID_HEX_KEY)
 
-def test_AES256_CBC(plaintext="This is a test message."):
-    hex_key = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
-    byte_key = encryption.derive_AES256_key(hex_key)
+    # Verify Structure: IV + Tag + Ciphertext
+    # AES-GCM does not pad, so ciphertext length = plaintext length
+    expected_length = IV_SIZE + TAG_SIZE + len(plaintext)
+    assert len(encrypted_payload) == expected_length
 
-    ciphertext = encryption.encrypt_AES256_CBC(plaintext, byte_key)
-    decrypted_text = encryption.decrypt_AES256_CBC(ciphertext, byte_key)
+    # 2. Decrypt
+    decrypted_text = encryption.decrypt_AES256(encrypted_payload, VALID_HEX_KEY)
 
+    # 3. Assert
     assert decrypted_text == plaintext
 
 
-def test_AES256_ECB(plaintext="This is a test message."):
-    hex_key = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
-    byte_key = encryption.derive_AES256_key(hex_key)
+def test_integrity_check_tampered_ciphertext():
+    """
+    Unit Test: Security Verification.
+    Verifies that if a payload is modified (tampered) after encryption,
+    decryption fails. This proves AES-GCM integrity is working.
+    """
+    plaintext = b"Sensitive Data"
+    # Encrypt and convert to mutable bytearray
+    encrypted_payload = bytearray(encryption.encrypt_AES256(plaintext, VALID_HEX_KEY))
 
-    ciphertext = encryption.encrypt_AES256_ECB(plaintext, byte_key)
-    decrypted_text = encryption.decrypt_AES256_ECB(ciphertext, byte_key)
+    # ATTACK: Flip the very last bit of the ciphertext
+    encrypted_payload[-1] ^= 0xFF
 
-    assert decrypted_text == plaintext
+    # Expect failure (your code raises ValueError on InvalidTag)
+    with pytest.raises(ValueError, match="Decryption Error"):
+        encryption.decrypt_AES256(bytes(encrypted_payload), VALID_HEX_KEY)
 
 
-def test_encryption_module():
-    test_derive_AES256_key()
-    test_AES256_encryption_decryption()
+def test_integrity_check_tampered_tag():
+    """
+    Unit Test: Security Verification.
+    Verifies that if the Authentication Tag is modified, decryption fails.
+    The Tag is located between bytes [12] and [28] (IV=12, Tag=16).
+    """
+    plaintext = b"Sensitive Data"
+    encrypted_payload = bytearray(encryption.encrypt_AES256(plaintext, VALID_HEX_KEY))
+
+    # ATTACK: Flip a byte inside the Tag region
+    encrypted_payload[15] ^= 0xFF
+
+    with pytest.raises(ValueError, match="Decryption Error"):
+        encryption.decrypt_AES256(bytes(encrypted_payload), VALID_HEX_KEY)
+
+
+def test_split_iv_tag_helper():
+    """
+    Unit Test: Verifies the helper function that dissects the packet.
+    """
+    # Create dummy components
+    dummy_iv = b"I" * IV_SIZE
+    dummy_tag = b"T" * TAG_SIZE
+    dummy_cipher = b"CiphertextData"
+
+    full_packet = dummy_iv + dummy_tag + dummy_cipher
+
+    # Call the internal helper
+    iv, tag, ciphertext = encryption.split_iv_tag_ciphertext(full_packet)
+
+    assert iv == dummy_iv
+    assert tag == dummy_tag
+    assert ciphertext == dummy_cipher

@@ -11,12 +11,8 @@ DEFAULT_RECEIVER_ID = os.getenv("PEER_SITE_ID", "A")
 
 app = Flask(__name__)
 
-# ==========================================
-# PHYSICS SIMULATION ENGINE (The "Distance" Logic)
-# ==========================================
-# 13.7 Mbps (Source) / 256 bits = ~53,000 keys/sec (Short Range)
-# 300 kbps (100 km)  / 256 bits = ~1,200 keys/sec
-# BUT: To see the effect visibly in a test, we use lower numbers:
+# KEY AVAILABILITY SIMULATION
+
 PHYSICS_CONFIG = {
     "KEY_REFILL_RATE": 5.0,  # Keys per second (Adjust this to simulate distance!)
     "MAX_BUCKET_SIZE": 10.0  # Burst capacity (How many keys can sit in buffer)
