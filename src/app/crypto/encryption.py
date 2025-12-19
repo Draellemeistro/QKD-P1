@@ -1,7 +1,10 @@
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives import hashes
 import secrets
+
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 # AES-GCM Standard Nonce (IV) size is 12 bytes
 IV_size = 12
@@ -11,8 +14,24 @@ TAG_SIZE = 16
 
 # --- Helper Functions ---
 
-def derive_AES256_key(hex_key: str) -> bytes:
-    return bytes.fromhex(hex_key)
+def derive_AES256_key(hex_key: str, context_info: bytes = b"QKD_File_Transfer") -> bytes:
+    """
+    Derives a 32-byte AES key from the raw QKD hex string using HKDF.
+    """
+    # 1. Convert hex to raw bytes (Input Key Material)
+    raw_key_material = bytes.fromhex(hex_key)
+
+    # 2. Setup HKDF
+    hkdf = HKDF(
+        algorithm=hashes.SHA384(),
+        length=32,                  # AES-256 requires 32 bytes
+        salt=None,
+        info=context_info,          
+        backend=default_backend()
+    )
+
+    # 3. Derive the specific session key
+    return hkdf.derive(raw_key_material)
 
 
 def split_iv_tag_ciphertext(data_bytes: bytes):
