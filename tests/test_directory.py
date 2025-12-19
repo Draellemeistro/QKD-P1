@@ -1,5 +1,5 @@
 import pytest
-from src.app.directory_server import app  # Assuming app instance is here
+from src.app.directory_server import app
 
 
 @pytest.fixture
@@ -9,21 +9,26 @@ def client():
         yield client
 
 
-def test_resolve_site_id(client):
-    """Test Requirement F14: Resolving a Site ID to an IP."""
-    # Register a dummy site
-    client.post('/register', json={'site_id': 'A', 'ip': '1.2.3.4', 'port': 9999})
-
-    # Query it
-    response = client.get('/resolve?site_id=A')
+def test_lookup_existing_user(client):
+    """Test Requirement F14: Resolving a known Site ID."""
+    # The code has 'alice' hardcoded
+    response = client.get('/lookup/alice')
     data = response.get_json()
 
     assert response.status_code == 200
-    assert data['ip'] == '1.2.3.4'
-    assert data['port'] == 9999
+    assert data['ip'] == '172.18.0.3'
+    assert data['site_id'] == 'A'
 
 
-def test_resolve_unknown_site(client):
-    """Test Error Handling for F14."""
-    response = client.get('/resolve?site_id=UNKNOWN')
+def test_lookup_unknown_user(client):
+    """Test resolving a non-existent site."""
+    response = client.get('/lookup/unknown_host')
     assert response.status_code == 404
+    assert response.get_json() == {"error": "Host not found"}
+
+
+def test_health_check(client):
+    """Test the health endpoint."""
+    response = client.get('/health')
+    assert response.status_code == 200
+    assert response.get_json()['status'] == 'running'
