@@ -50,7 +50,7 @@ def new_key(receiver_id):
 
         duration = time.time() - start_time
         # Log purely the network/KMS wait time
-        #print(f" [Profile] KMS HTTP Request took: {duration:.4f}s")
+        print(f" [Profile] KMS HTTP Request took: {duration:.4f}s")
 
         return r.json()
 
