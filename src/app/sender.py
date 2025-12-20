@@ -102,9 +102,10 @@ def ensure_valid_key(current_key, bytes_used, soft_limit, hard_limit, receiver_i
 
             # Schedule the next rotation attempt (retry spacing)
             metrics["rotate_cooldown_until_ts"] = time.time() + 0.2
-
+            t0 = time.time()
             # Small delay to avoid hot-looping (your request)
             time.sleep(0.02)
+            metrics["kms_503_wait_time_s"] += (time.time() - t0)
 
             return current_key
         raise
