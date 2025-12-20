@@ -14,7 +14,7 @@ app = Flask(__name__)
 # KEY AVAILABILITY SIMULATION
 
 PHYSICS_CONFIG = {
-    "KEY_REFILL_RATE": 0.1,  # Keys per second (Adjust this to simulate distance!)
+    "KEY_REFILL_RATE": 0,  # Keys per second (Adjust this to simulate distance!)
     "MAX_BUCKET_SIZE": 10.0  # Burst capacity (How many keys can sit in buffer)
 }
 
