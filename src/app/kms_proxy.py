@@ -11,36 +11,30 @@ DEFAULT_RECEIVER_ID = os.getenv("PEER_SITE_ID", "A")
 
 app = Flask(__name__)
 
-# KEY AVAILABILITY SIMULATION
+# ==========================================
+# KEY AVAILABILITY SIMULATION (Option A)
+# Smooth rate limiter (no burst buffer)
+# ==========================================
 
-PHYSICS_CONFIG = {
-    "KEY_REFILL_RATE": 10,  # Keys per second (Adjust this to simulate distance!)
-    "MAX_BUCKET_SIZE": 10.0  # Burst capacity (How many keys can sit in buffer)
-}
+# For 300 kbps with 256-bit keys: 300_000 / 256 = 1171.875 keys/s
+KEYS_PER_SEC = 1171.875
+MIN_INTERVAL_S = 1.0 / KEYS_PER_SEC
 
-# Simulation State (Global)
+# Global limiter state
 sim_state = {
-    "bucket": PHYSICS_CONFIG["MAX_BUCKET_SIZE"],
-    "last_check": time.time()
+    "next_allowed_ts": time.time()
 }
 
 
-def consume_key_token():
+def allow_key_now() -> bool:
     """
-    Implements the Token Bucket Algorithm.
-    Returns True if a key is physically available, False if exhausted.
+    Smooth rate limiter: permits one key issuance every MIN_INTERVAL_S seconds.
+    No burst accumulation/buffer.
     """
     now = time.time()
-    elapsed = now - sim_state["last_check"]
-
-    # 1. Refill the bucket based on Rate (R)
-    added_tokens = elapsed * PHYSICS_CONFIG["KEY_REFILL_RATE"]
-    sim_state["bucket"] = min(PHYSICS_CONFIG["MAX_BUCKET_SIZE"], sim_state["bucket"] + added_tokens)
-    sim_state["last_check"] = now
-
-    # 2. Try to consume 1 token
-    if sim_state["bucket"] >= 1:
-        sim_state["bucket"] -= 1
+    if now >= sim_state["next_allowed_ts"]:
+        # Schedule next slot; using now prevents drift if requests arrive late.
+        sim_state["next_allowed_ts"] = now + MIN_INTERVAL_S
         return True
     return False
 
@@ -61,29 +55,24 @@ def check_auth(username: Optional[str], password: Optional[str]) -> bool:
 
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({"status": "online"})
+    return jsonify({"status": "online", "keys_per_sec": KEYS_PER_SEC})
 
 
 # 1. NEW KEY (Sender Requests) -> APPLY LIMIT HERE
 # Client sends: POST /api/newkey?siteid=B
 @app.route("/api/newkey", methods=["POST"])
 def serve_new_key():
-    # --- PHYSICS CHECK START ---
-    if not consume_key_token():
-        # Return 503 Service Unavailable so Sender knows to wait/adapt
+    # --- PHYSICS CHECK START (Smooth limiter) ---
+    if not allow_key_now():
         return jsonify({
             "error": "Key Exhaustion",
-            "detail": "Simulated QKD link rate limit reached."
+            "detail": "Simulated QKD key-rate limit reached (smooth limiter)."
         }), 503
     # --- PHYSICS CHECK END ---
 
-    # 1. Extract 'siteid'
-    target_site = request.args.get("siteid")
-    if not target_site:
-        target_site = DEFAULT_RECEIVER_ID
+    target_site = request.args.get("siteid") or DEFAULT_RECEIVER_ID
 
     try:
-        # 2. Call Real KMS
         return jsonify(new_key(target_site))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -115,4 +104,5 @@ def serve_auth():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=SERVER_PORT, debug=True)
+    # Avoid debug=True here: it can spawn a reloader process and break timing/state.
+    app.run(host="0.0.0.0", port=SERVER_PORT, debug=False)
