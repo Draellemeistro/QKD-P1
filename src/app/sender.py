@@ -10,8 +10,8 @@ from src.app.transfer.protocol import create_data_packet, create_termination_pac
 
 # --- CONFIGURATION ---
 CHUNK_SIZE = 64 * 1024
-KEY_ROTATION_SOFT_LIMIT = 1024 * 1024 * 10
-KEY_ROTATION_HARD_LIMIT = 1024 * 1024 * 50
+KEY_ROTATION_SOFT_LIMIT = 1024 * 1
+KEY_ROTATION_HARD_LIMIT = 1024 * 10
 
 
 def establish_connection(ip, port):
