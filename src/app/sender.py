@@ -73,6 +73,7 @@ def ensure_valid_key(current_key, bytes_used, soft_limit, hard_limit, receiver_i
                 else:
                     metrics["kms_503_soft_extend"] += 1
                     print(f" [i] Rate Limit (503). Extending key life (Used: {bytes_used / 1024:.0f} KB)")
+                    time.sleep(0.02)
                     return current_key
             raise
     return current_key
