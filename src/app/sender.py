@@ -50,12 +50,20 @@ def fetch_key_blocking(receiver_id, metrics):
 def ensure_valid_key(current_key, bytes_used, soft_limit, hard_limit, receiver_id, metrics):
     """
     Soft-limit behavior: attempt rotation. If 503:
-      - below hard limit: extend current key life (availability)
+      - below hard limit: extend current key life (availability) + cooldown to avoid retry storms
       - at/above hard limit: block until new key (security policy)
+
+    Requires metrics dict to include:
+      metrics["rotate_cooldown_until_ts"] (float)  # initialize to 0.0
     """
     if current_key is None:
         print("Initial key fetch...")
         return fetch_key_blocking(receiver_id, metrics)
+
+    # --- Cooldown gate: if we're extending due to 503, don't re-attempt rotation every chunk ---
+    now = time.time()
+    if now < metrics.get("rotate_cooldown_until_ts", 0.0):
+        return current_key
 
     if bytes_used >= soft_limit:
         try:
@@ -73,7 +81,59 @@ def ensure_valid_key(current_key, bytes_used, soft_limit, hard_limit, receiver_i
                 else:
                     metrics["kms_503_soft_extend"] += 1
                     print(f" [i] Rate Limit (503). Extending key life (Used: {bytes_used / 1024:.0f} KB)")
+
+                    # Cooldown: prevents retrying rotation on every 64KB chunk after soft-limit is reached.
+                    # Tune as needed; 0.2s is a good starting point for Docker + HTTP overhead.
+                    metrics["rotate_cooldown_until_ts"] = time.time() + 0.2
+
+                    # Small retry hygiene delay (optional, keep if you want)
                     time.sleep(0.02)
+
+                    return current_key
+            raise
+    return current_key
+def ensure_valid_key(current_key, bytes_used, soft_limit, hard_limit, receiver_id, metrics):
+    """
+    Soft-limit behavior: attempt rotation. If 503:
+      - below hard limit: extend current key life (availability) + cooldown to avoid retry storms
+      - at/above hard limit: block until new key (security policy)
+
+    Requires metrics dict to include:
+      metrics["rotate_cooldown_until_ts"] (float)  # initialize to 0.0
+    """
+    if current_key is None:
+        print("Initial key fetch...")
+        return fetch_key_blocking(receiver_id, metrics)
+
+    # --- Cooldown gate: if we're extending due to 503, don't re-attempt rotation every chunk ---
+    now = time.time()
+    if now < metrics.get("rotate_cooldown_until_ts", 0.0):
+        return current_key
+
+    if bytes_used >= soft_limit:
+        try:
+            return new_key(receiver_id)
+        except requests.exceptions.HTTPError as e:
+            if e.response is not None and e.response.status_code == 503:
+                metrics["kms_503_total"] += 1
+
+                if metrics["kms_503_first_at_mb"] is None:
+                    metrics["kms_503_first_at_mb"] = metrics["mb_sent_so_far"]
+
+                if bytes_used >= hard_limit:
+                    print(f" [!] HARD LIMIT HIT ({bytes_used / (1024*1024):.2f} MB). Blocking for new key...")
+                    return fetch_key_blocking(receiver_id, metrics)
+                else:
+                    metrics["kms_503_soft_extend"] += 1
+                    print(f" [i] Rate Limit (503). Extending key life (Used: {bytes_used / 1024:.0f} KB)")
+
+                    # Cooldown: prevents retrying rotation on every 64KB chunk after soft-limit is reached.
+                    # Tune as needed; 0.2s is a good starting point for Docker + HTTP overhead.
+                    metrics["rotate_cooldown_until_ts"] = time.time() + 0.2
+
+                    # Small retry hygiene delay (optional, keep if you want)
+                    time.sleep(0.02)
+
                     return current_key
             raise
     return current_key
@@ -108,6 +168,7 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
         "kms_503_wait_time_s": 0.0,
         "kms_503_first_at_mb": None,
         "mb_sent_so_far": 0.0,  # updated during loop
+        "rotate_cooldown_until_ts": 0.0 # NEW: cooldown gate for soft-limit retries
     }
 
     current_key_data = None
