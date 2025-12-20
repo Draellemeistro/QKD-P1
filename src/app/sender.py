@@ -76,6 +76,13 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
     t_encryption = 0.0
     t_network_send = 0.0
 
+    # --- KEY FETCH COUNTERS ---
+    kms_calls_total = 0
+    kms_rotations_total = 0
+    kms_blocks_total = 0
+    last_block_id = None
+    last_key_index = None
+
     print(f"Starting transfer of {file_path}...")
     start_time = time.time()
 
@@ -84,7 +91,10 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
         try:
             # A. Key Management
             t0 = time.time()
+
             old_key_id = current_key_data["index"] if current_key_data else -1
+            old_block_id = current_key_data["blockId"] if current_key_data else None
+
             current_key_data = ensure_valid_key(
                 current_key_data,
                 bytes_encrypted_with_current_key,
@@ -92,13 +102,28 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
                 KEY_ROTATION_HARD_LIMIT,
                 receiver_id
             )
+
             t_key_fetch += (time.time() - t0)
 
-            if current_key_data["index"] != old_key_id:
+            # Count if a new key was obtained (initial fetch or rotation)
+            if (old_block_id is None) or (current_key_data["index"] != old_key_id) or (current_key_data["blockId"] != old_block_id):
+                kms_calls_total += 1
+
+                # Count "rotations" (exclude the very first key)
+                if old_block_id is not None:
+                    kms_rotations_total += 1
+
+                # Track how often we crossed into a new block
+                if current_key_data["blockId"] != last_block_id:
+                    kms_blocks_total += 1
+                    last_block_id = current_key_data["blockId"]
+
+                last_key_index = current_key_data["index"]
+
+                # Reset usage counter when key changes (your existing logic)
                 bytes_encrypted_with_current_key = 0
 
             # B. Processing (Encryption)
-            # Inlined logic from send_chunk_packet to measure encryption separately
             t0 = time.time()
             encrypted_payload = encryption.encrypt_AES256(chunk["data"], current_key_data["hexKey"])
             packet = create_data_packet(
@@ -148,6 +173,13 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
 
     t_other = total_duration - (t_key_fetch + t_encryption + t_network_send)
     print(f"  Disk/Overhead: {t_other:.4f} s ({(t_other / total_duration) * 100:.1f}%)")
+    print("-" * 40)
+    print("KMS COUNTS:")
+    print(f"  KMS key fetches (total):   {kms_calls_total}")
+    print(f"  KMS rotations (excl init): {kms_rotations_total}")
+    print(f"  Key blocks observed:       {kms_blocks_total}")
+    if kms_calls_total > 0:
+        print(f"  Avg ms per key fetch:      {(t_key_fetch / kms_calls_total) * 1000:.2f} ms")
     print("=" * 40 + "\n")
 
     # --- UPDATE: TCP ACK WAITING ---
