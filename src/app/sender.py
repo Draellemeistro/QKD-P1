@@ -12,8 +12,8 @@ from src.app.transfer.protocol import create_data_packet, create_termination_pac
 CHUNK_SIZE = 64 * 1024
 
 # Rotation policy (bytes)
-KEY_ROTATION_SOFT_LIMIT = 1024 * 1024 * 1   # 10 MB
-KEY_ROTATION_HARD_LIMIT = 1024 * 1024 * 1.5   # 15 MB
+KEY_ROTATION_SOFT_LIMIT = 1024 * 256   # 10 MB
+KEY_ROTATION_HARD_LIMIT = 1024 * 384   # 15 MB
 
 
 def establish_connection(ip, port):
