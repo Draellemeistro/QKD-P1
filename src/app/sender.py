@@ -9,11 +9,11 @@ from src.app.transfer.network_utils import resolve_host
 from src.app.transfer.protocol import create_data_packet, create_termination_packet, decode_packet_with_headers
 
 # --- CONFIGURATION ---
-CHUNK_SIZE = 64 * 1024
+CHUNK_SIZE = 64 * 1024  # 64KB
 
-# Rotation policy (bytes)
-KEY_ROTATION_SOFT_LIMIT = 1024 * 256    # 10 MB
-KEY_ROTATION_HARD_LIMIT = 1024 * 384   # 15 MB
+# Rotation policy (bytes)  ✅ FIXED UNITS
+KEY_ROTATION_SOFT_LIMIT = 10 * 1024 * 1024   # 10 MB
+KEY_ROTATION_HARD_LIMIT = 15 * 1024 * 1024   # 15 MB
 
 
 def establish_connection(ip, port):
@@ -23,14 +23,36 @@ def establish_connection(ip, port):
     return None
 
 
+def _timed_new_key(receiver_id, metrics):
+    """
+    Wrap new_key() so we count attempts/success and accumulate timing.
+    """
+    metrics["kms_http_attempts"] += 1
+    t0 = time.time()
+    try:
+        key = new_key(receiver_id)
+        metrics["kms_http_success"] += 1
+        return key, (time.time() - t0)
+    except requests.exceptions.HTTPError as e:
+        dt = (time.time() - t0)
+        # Count 503 separately (other errors bubble up)
+        if e.response is not None and e.response.status_code == 503:
+            metrics["kms_http_503"] += 1
+        raise
+    finally:
+        # total time spent in HTTP attempts (success or fail)
+        metrics["kms_http_time_s"] += (time.time() - t0)
+
+
 def fetch_key_blocking(receiver_id, metrics):
     """
     Hard-limit behavior: block until a key is available.
-    Logs 503 counts + wait time.
+    Tracks 503 counts + wait time.
     """
     while True:
         try:
-            return new_key(receiver_id)
+            key, _ = _timed_new_key(receiver_id, metrics)
+            return key
         except requests.exceptions.HTTPError as e:
             if e.response is not None and e.response.status_code == 503:
                 metrics["kms_503_total"] += 1
@@ -39,7 +61,7 @@ def fetch_key_blocking(receiver_id, metrics):
                 if metrics["kms_503_first_at_mb"] is None:
                     metrics["kms_503_first_at_mb"] = metrics["mb_sent_so_far"]
 
-                print(" [!] Hard Limit / No Key: KMS busy (503). Waiting 1s...")
+                # Backoff for hard-blocking (this is fine to keep at 1s)
                 t0 = time.time()
                 time.sleep(1)
                 metrics["kms_503_wait_time_s"] += (time.time() - t0)
@@ -48,95 +70,44 @@ def fetch_key_blocking(receiver_id, metrics):
 
 
 def ensure_valid_key(current_key, bytes_used, soft_limit, hard_limit, receiver_id, metrics):
-    """
-    Soft-limit behavior: attempt rotation. If 503:
-      - below hard limit: extend current key life (availability) + cooldown to avoid retry storms
-      - at/above hard limit: block until new key (security policy)
-
-    Requires metrics dict to include:
-      metrics["rotate_cooldown_until_ts"] (float)  # initialize to 0.0
-    """
     if current_key is None:
         print("Initial key fetch...")
         return fetch_key_blocking(receiver_id, metrics)
 
-    # --- Cooldown gate: if we're extending due to 503, don't re-attempt rotation every chunk ---
-    now = time.time()
-    if now < metrics.get("rotate_cooldown_until_ts", 0.0):
+    # Only consider rotating once we've exceeded the soft limit
+    if bytes_used < soft_limit:
         return current_key
 
-    if bytes_used >= soft_limit:
-        try:
-            return new_key(receiver_id)
-        except requests.exceptions.HTTPError as e:
-            if e.response is not None and e.response.status_code == 503:
-                metrics["kms_503_total"] += 1
-
-                if metrics["kms_503_first_at_mb"] is None:
-                    metrics["kms_503_first_at_mb"] = metrics["mb_sent_so_far"]
-
-                if bytes_used >= hard_limit:
-                    print(f" [!] HARD LIMIT HIT ({bytes_used / (1024*1024):.2f} MB). Blocking for new key...")
-                    return fetch_key_blocking(receiver_id, metrics)
-                else:
-                    metrics["kms_503_soft_extend"] += 1
-                    print(f" [i] Rate Limit (503). Extending key life (Used: {bytes_used / 1024:.0f} KB)")
-
-                    # Cooldown: prevents retrying rotation on every 64KB chunk after soft-limit is reached.
-                    # Tune as needed; 0.2s is a good starting point for Docker + HTTP overhead.
-                    metrics["rotate_cooldown_until_ts"] = time.time() + 0.2
-
-                    # Small retry hygiene delay (optional, keep if you want)
-                    time.sleep(0.02)
-
-                    return current_key
-            raise
-    return current_key
-def ensure_valid_key(current_key, bytes_used, soft_limit, hard_limit, receiver_id, metrics):
-    """
-    Soft-limit behavior: attempt rotation. If 503:
-      - below hard limit: extend current key life (availability) + cooldown to avoid retry storms
-      - at/above hard limit: block until new key (security policy)
-
-    Requires metrics dict to include:
-      metrics["rotate_cooldown_until_ts"] (float)  # initialize to 0.0
-    """
-    if current_key is None:
-        print("Initial key fetch...")
+    # Enforce hard limit regardless of cooldown
+    if bytes_used >= hard_limit:
+        print(f" [!] HARD LIMIT HIT ({bytes_used / (1024*1024):.2f} MB). Blocking for new key...")
         return fetch_key_blocking(receiver_id, metrics)
 
-    # --- Cooldown gate: if we're extending due to 503, don't re-attempt rotation every chunk ---
+    # Cooldown gate only for soft-limit retries
     now = time.time()
     if now < metrics.get("rotate_cooldown_until_ts", 0.0):
         return current_key
 
-    if bytes_used >= soft_limit:
-        try:
-            return new_key(receiver_id)
-        except requests.exceptions.HTTPError as e:
-            if e.response is not None and e.response.status_code == 503:
-                metrics["kms_503_total"] += 1
+    # Try to rotate
+    try:
+        key, _ = _timed_new_key(receiver_id, metrics)
+        return key
+    except requests.exceptions.HTTPError as e:
+        if e.response is not None and e.response.status_code == 503:
+            metrics["kms_503_total"] += 1
+            if metrics["kms_503_first_at_mb"] is None:
+                metrics["kms_503_first_at_mb"] = metrics["mb_sent_so_far"]
 
-                if metrics["kms_503_first_at_mb"] is None:
-                    metrics["kms_503_first_at_mb"] = metrics["mb_sent_so_far"]
+            metrics["kms_503_soft_extend"] += 1
 
-                if bytes_used >= hard_limit:
-                    print(f" [!] HARD LIMIT HIT ({bytes_used / (1024*1024):.2f} MB). Blocking for new key...")
-                    return fetch_key_blocking(receiver_id, metrics)
-                else:
-                    metrics["kms_503_soft_extend"] += 1
-                    print(f" [i] Rate Limit (503). Extending key life (Used: {bytes_used / 1024:.0f} KB)")
+            # Schedule the next rotation attempt (retry spacing)
+            metrics["rotate_cooldown_until_ts"] = time.time() + 0.2
 
-                    # Cooldown: prevents retrying rotation on every 64KB chunk after soft-limit is reached.
-                    # Tune as needed; 0.2s is a good starting point for Docker + HTTP overhead.
-                    metrics["rotate_cooldown_until_ts"] = time.time() + 0.2
+            # Small delay to avoid hot-looping (your request)
+            time.sleep(0.02)
 
-                    # Small retry hygiene delay (optional, keep if you want)
-                    time.sleep(0.02)
-
-                    return current_key
-            raise
-    return current_key
+            return current_key
+        raise
 
 
 def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
@@ -149,27 +120,36 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
     file_hash = hash_file(file_path)
     print(f"File Hash (SHA-256): {file_hash}")
 
-    # --- PERFORMANCE TIMERS ---
-    t_key_fetch = 0.0
+    # --- PERFORMANCE TIMERS (application-side breakdown) ---
+    t_key_fetch = 0.0       # time inside ensure_valid_key (includes local logic + sleep)
     t_encryption = 0.0
     t_network_send = 0.0
 
-    # --- KEY FETCH COUNTERS ---
-    kms_calls_total = 0
-    kms_rotations_total = 0
-    kms_blocks_total = 0
+    # --- KMS SUCCESS COUNTS (actual key changes) ---
+    kms_successful_key_changes = 0
+    kms_rotations_success = 0
+    kms_blocks_observed = 0
     last_block_id = None
 
-    # --- SCARCITY / 503 METRICS ---
+    # --- SCARCITY / 503 METRICS + HTTP accounting ---
     metrics = {
         "kms_503_total": 0,
         "kms_503_soft_extend": 0,
         "kms_503_hard_block": 0,
         "kms_503_wait_time_s": 0.0,
         "kms_503_first_at_mb": None,
-        "mb_sent_so_far": 0.0,  # updated during loop
-        "rotate_cooldown_until_ts": 0.0 # NEW: cooldown gate for soft-limit retries
+        "mb_sent_so_far": 0.0,
+        "rotate_cooldown_until_ts": 0.0,
+        # NEW: raw HTTP attempt accounting
+        "kms_http_attempts": 0,
+        "kms_http_success": 0,
+        "kms_http_503": 0,
+        "kms_http_time_s": 0.0,
     }
+
+    # --- TRUE SECURITY METRICS (keys actually used to encrypt chunks) ---
+    keys_used_set = set()            # unique (blockId, index) used in encryption
+    key_bytes_usage = {}             # (blockId, index) -> bytes encrypted under that key
 
     current_key_data = None
     bytes_encrypted_with_current_key = 0
@@ -202,7 +182,7 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
             )
             t_key_fetch += (time.time() - t0)
 
-            # Detect actual key change (init or rotation)
+            # Detect actual key change (init or rotation) - SUCCESSFUL changes only
             key_changed = (
                 old_block_id is None or
                 current_key_data["blockId"] != old_block_id or
@@ -210,17 +190,20 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
             )
 
             if key_changed:
-                kms_calls_total += 1
+                kms_successful_key_changes += 1
                 if old_block_id is not None:
-                    kms_rotations_total += 1
+                    kms_rotations_success += 1
 
                 if current_key_data["blockId"] != last_block_id:
-                    kms_blocks_total += 1
+                    kms_blocks_observed += 1
                     last_block_id = current_key_data["blockId"]
 
                 bytes_encrypted_with_current_key = 0
 
             # B. Encryption
+            key_id = (current_key_data["blockId"], current_key_data["index"])
+            keys_used_set.add(key_id)
+
             t0 = time.time()
             encrypted_payload = encryption.encrypt_AES256(chunk["data"], current_key_data["hexKey"])
             packet = create_data_packet(
@@ -230,6 +213,9 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
                 encrypted_payload
             )
             t_encryption += (time.time() - t0)
+
+            # Track bytes encrypted under the key actually used
+            key_bytes_usage[key_id] = key_bytes_usage.get(key_id, 0) + chunk["size"]
 
             # C. Network Send
             t0 = time.time()
@@ -258,30 +244,45 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
     total_duration = time.time() - start_time
     mb_sent = total_bytes / 1024 / 1024
 
-    # Security metric: effective data per key
-    keys_used = max(kms_rotations_total, 1)  # avoid divide-by-zero
-    effective_mb_per_key = mb_sent / keys_used
+    # TRUE security metric: MB per UNIQUE key actually used
+    unique_keys_used = max(len(keys_used_set), 1)
+    effective_mb_per_key = mb_sent / unique_keys_used
+
+    # Extra: max bytes under any single key
+    max_mb_under_one_key = 0.0
+    if key_bytes_usage:
+        max_mb_under_one_key = max(key_bytes_usage.values()) / 1024 / 1024
+
+    # Avg ms per HTTP attempt (success+fail), and per success
+    avg_ms_per_attempt = (metrics["kms_http_time_s"] / max(metrics["kms_http_attempts"], 1)) * 1000
+    avg_ms_per_success = (metrics["kms_http_time_s"] / max(metrics["kms_http_success"], 1)) * 1000
 
     print("\n" + "=" * 40)
     print(f"TRANSFER COMPLETE: {mb_sent:.2f} MB in {total_duration:.2f}s")
     print(f"Throughput:      {(mb_sent * 8) / total_duration:.2f} Mbps")
     print("-" * 40)
     print("TIME BREAKDOWN:")
-    print(f"  KMS Fetching:  {t_key_fetch:.4f} s ({(t_key_fetch / total_duration) * 100:.1f}%)")
+    print(f"  KMS Handling:  {t_key_fetch:.4f} s ({(t_key_fetch / total_duration) * 100:.1f}%)")
     print(f"  Encryption:    {t_encryption:.4f} s ({(t_encryption / total_duration) * 100:.1f}%)")
     print(f"  Network Send:  {t_network_send:.4f} s ({(t_network_send / total_duration) * 100:.1f}%)")
     t_other = total_duration - (t_key_fetch + t_encryption + t_network_send)
     print(f"  Disk/Overhead: {t_other:.4f} s ({(t_other / total_duration) * 100:.1f}%)")
     print("-" * 40)
 
-    print("KMS COUNTS:")
-    print(f"  KMS key fetches (total):   {kms_calls_total}")
-    print(f"  KMS rotations (excl init): {kms_rotations_total}")
-    print(f"  Key blocks observed:       {kms_blocks_total}")
-    if kms_calls_total > 0:
-        print(f"  Avg ms per key fetch:      {(t_key_fetch / kms_calls_total) * 1000:.2f} ms")
-
+    print("KMS SUCCESS COUNTS (actual key changes):")
+    print(f"  Successful key changes (incl init): {kms_successful_key_changes}")
+    print(f"  Successful rotations (excl init):   {kms_rotations_success}")
+    print(f"  Key blocks observed:                {kms_blocks_observed}")
     print("-" * 40)
+
+    print("KMS HTTP COUNTS (attempt-level):")
+    print(f"  HTTP attempts total:        {metrics['kms_http_attempts']}")
+    print(f"  HTTP successes total:       {metrics['kms_http_success']}")
+    print(f"  HTTP 503 total:             {metrics['kms_http_503']}")
+    print(f"  Avg ms per HTTP attempt:    {avg_ms_per_attempt:.2f} ms")
+    print(f"  Avg ms per HTTP success:    {avg_ms_per_success:.2f} ms")
+    print("-" * 40)
+
     print("SCARCITY (503) METRICS:")
     print(f"  503 responses total:        {metrics['kms_503_total']}")
     print(f"  503 during soft-limit:      {metrics['kms_503_soft_extend']}")
@@ -291,10 +292,12 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
         print(f"  First 503 at:               {metrics['kms_503_first_at_mb']:.2f} MB sent")
     else:
         print("  First 503 at:               (none)")
-
     print("-" * 40)
-    print("SECURITY METRIC:")
+
+    print("SECURITY METRICS (based on keys actually used in encryption):")
+    print(f"  Unique keys used:           {unique_keys_used}")
     print(f"  Effective data per key:     {effective_mb_per_key:.3f} MB/key")
+    print(f"  Max data under one key:     {max_mb_under_one_key:.3f} MB")
     print("=" * 40 + "\n")
 
     print("[Protocol] Waiting for Receiver Confirmation (ACK)...")
