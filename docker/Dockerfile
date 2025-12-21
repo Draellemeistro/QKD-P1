@@ -2,7 +2,7 @@
 FROM eclipse-temurin:11-jdk-focal
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 1. Install Dependencies
+# Install Dependencies
 # Added 'libenet-dev' (Required for pyenet)
 RUN apt-get update && apt-get install -y \
     maven \
@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y \
     libenet-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# 2. Install Python Libraries
+# Install Python Libraries
 # Added 'pyenet'
 RUN pip3 install requests python-dotenv cryptography pyenet flask
 
@@ -32,15 +32,15 @@ COPY ./src /app/src
 # Set PYTHONPATH so python can find your modules
 ENV PYTHONPATH="${PYTHONPATH}:/app"
 
-# 3. Build the Java microservices
+# Build the Java microservices
 WORKDIR /app/qkd-net/kms
 RUN ./scripts/build
 
-# 4. Pre-build the C-based demo applications
+# Pre-build the C-based demo applications
 WORKDIR /app/qkd-net/applications/tls-kms-demo
 RUN make
 
-# 5. Set the default directory
+# Set the default directory
 WORKDIR /app/qkd-net/kms
 
 # Default CMD

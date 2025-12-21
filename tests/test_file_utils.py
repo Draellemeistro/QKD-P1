@@ -16,18 +16,18 @@ def test_split_file_into_chunks(tmp_path):
     Verifies that a binary file is correctly split into smaller chunks,
     preserving order and handling the remainder (last chunk) correctly.
     """
-    # 1. Setup: Create a dummy file (10 bytes)
+    # Create a dummy file (10 bytes)
     file_path = tmp_path / "test_split.bin"
     # Content: 0123456789
     file_content = b"0123456789"
     file_path.write_bytes(file_content)
 
-    # 2. Execute: Split into 3-byte chunks
+    # Split into 3-byte chunks
     chunk_size = 3
     generator = split_file_into_chunks(str(file_path), chunk_size)
     chunks = list(generator)
 
-    # 3. Assertions
+    # Assertions
     # We expect 4 chunks: [012], [345], [678], [9]
     assert len(chunks) == 4
 

@@ -22,10 +22,10 @@ Refer to QKD-net readme for further instructions on how to use the QKD simulator
 QKD-net is a git submodules. After cloning the repository, you need to initialize and update it:
 
 ```bash
-# 1. Initialize the submodule (reads the .gitmodules file)
+# Initialize the submodule (reads the .gitmodules file)
 git submodule init
 
-# 2. Update the submodule (fetches the content for the correct commit)
+# Update the submodule (fetches the content for the correct commit)
 git submodule update
 ```
 

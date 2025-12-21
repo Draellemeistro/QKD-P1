@@ -38,7 +38,7 @@ def process_single_packet(packet_dict, writer, sender_id, key_cache):
     chunk_id = packet_dict.get("chunk_id", -1)
 
     try:
-        # 2. Fetch Key
+        # Fetch Key
         needed_key_id = (packet_dict["key_block_id"], packet_dict["key_index"])
 
         # Check if we need to fetch a new key
@@ -56,10 +56,10 @@ def process_single_packet(packet_dict, writer, sender_id, key_cache):
 
         current_key = key_cache["data"]
 
-        # 3. Decrypt
+        # Decrypt
         decrypted_str = encryption.decrypt_AES256(packet_dict["data"], current_key["hexKey"])
 
-        # 4. Write to Stream
+        # Write to Stream
         writer.append(decrypted_str)
 
         # Log progress (only every 10th chunk to reduce console spam)
@@ -85,7 +85,6 @@ def run_reception_loop(transport, output_file, receiver_id):
         print(f"Ready to write to {output_file}")
 
         while True:
-            # 1. Blocking Receive (TCP waits automatically if no data)
             packet_data = transport.receive_packet()
 
             # If receive_packet returns None, the sender closed the connection (or crashed)
@@ -94,7 +93,7 @@ def run_reception_loop(transport, output_file, receiver_id):
                 break
 
             try:
-                # 2. Parse Protocol
+                # Parse Protocol
                 headers, encrypted_data = decode_packet_with_headers(packet_data)
 
                 # Convert to dict
@@ -106,7 +105,6 @@ def run_reception_loop(transport, output_file, receiver_id):
                     "data": encrypted_data
                 }
 
-                # 3. Execute Logic
                 if packet_dict["is_last"]:
                     received_hash = headers.get("file_hash", "")
                     print("\nTermination packet received.")

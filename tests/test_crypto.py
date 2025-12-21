@@ -16,7 +16,7 @@ def test_key_derivation_hkdf():
     """
     raw_key_bytes = bytes.fromhex(VALID_HEX_KEY)
 
-    # 1. Derive Key
+    # Derive Key
     derived_key_1 = encryption.derive_AES256_key(VALID_HEX_KEY)
     derived_key_2 = encryption.derive_AES256_key(VALID_HEX_KEY)
 
@@ -49,17 +49,17 @@ def test_encrypt_decrypt_success():
     """
     plaintext = b"Patient Record: Critical Condition - ID 12345"
 
-    # 1. Encrypt
+    # Encrypt
     encrypted_payload = encryption.encrypt_AES256(plaintext, VALID_HEX_KEY)
 
     # Verify Structure: IV + Tag + Ciphertext
     expected_length = IV_SIZE + TAG_SIZE + len(plaintext)
     assert len(encrypted_payload) == expected_length
 
-    # 2. Decrypt
+    # Decrypt
     decrypted_text = encryption.decrypt_AES256(encrypted_payload, VALID_HEX_KEY)
 
-    # 3. Assert
+    # Assert
     assert decrypted_text == plaintext
 
 

@@ -39,16 +39,16 @@ def ensure_valid_key(current_key, bytes_used, soft_limit, hard_limit, receiver_i
     Checks if key needs rotation.
     Returns: (key_data, next_cooldown_timestamp)
     """
-    # 1. Initial Fetch
+    # Initial Fetch
     if current_key is None:
         print("Initial key fetch...")
         return fetch_key_blocking(receiver_id), cooldown_ts
 
-    # 2. Check Cooldown (Prevent spamming 503s)
+    # Check Cooldown (Prevent spamming 503s)
     if time.time() < cooldown_ts:
         return current_key, cooldown_ts
 
-    # 3. Check Limits
+    # heck Limits
     if bytes_used >= soft_limit:
         try:
             # Try to rotate

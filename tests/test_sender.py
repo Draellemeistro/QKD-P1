@@ -31,7 +31,7 @@ def test_run_file_transfer_flow(
         mock_transport_cls, mock_resolve, mock_new_key,
         mock_split, mock_encrypt, mock_hash, mock_key_response
 ):
-    # 1. Setup Mocks
+    # Setup Mocks
     mock_transport = mock_transport_cls.return_value
     mock_transport.connect.return_value = True
 
@@ -48,10 +48,10 @@ def test_run_file_transfer_flow(
     mock_hash.return_value = "dummy_sha256"
     mock_transport.receive_packet.return_value = b'type:ACK|status:OK|message:Done\n'
 
-    # 2. Run
+    # Run
     run_file_transfer("B", "1.2.3.4", 9999, "dummy_path.txt")
 
-    # 3. Assertions
+    # Assertions
     mock_transport.connect.assert_called_with("1.2.3.4", 9999)
     assert mock_transport.send_reliable.call_count == 3
 

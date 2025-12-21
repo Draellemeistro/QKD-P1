@@ -46,9 +46,9 @@ def test_reception_loop_flow(mock_process, mock_writer_cls, mock_create_ack, moc
     mock_transport = MagicMock()
     mock_validate.return_value = True
 
-    # 1. Standard Data Packet Header (type:chunk_id|...)
+    # Standard Data Packet Header (type:chunk_id|...)
     event1 = b'chunk_id:1|key_block_id:A|key_index:1\n' + b'data'
-    # 2. Termination Packet Header (must have is_last:true)
+    # Termination Packet Header (must have is_last:true)
     event2 = b'chunk_id:-1|is_last:true|file_hash:abc\n'
 
     # Simulate the socket receiving these two packets

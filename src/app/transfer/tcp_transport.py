@@ -44,10 +44,10 @@ class TcpTransport:
         if not self.conn:
             raise ConnectionError("No connection established")
 
-        # 1. Pack length (4 bytes big-endian)
+        # Pack length (4 bytes big-endian)
         length_header = struct.pack('>I', len(data))
 
-        # 2. Send Length + Data
+        # Send Length + Data
         self.conn.sendall(length_header + data)
 
     def receive_packet(self):
@@ -58,13 +58,13 @@ class TcpTransport:
         if not self.conn: return None
 
         try:
-            # 1. Read Length Header (4 bytes)
+            # Read Length Header (4 bytes)
             header = self._recv_exact(4)
             if not header: return None  # Connection closed
 
             msg_length = struct.unpack('>I', header)[0]
 
-            # 2. Read Payload
+            # Read Payload
             return self._recv_exact(msg_length)
         except ConnectionResetError:
             return None

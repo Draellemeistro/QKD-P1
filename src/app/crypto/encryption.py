@@ -18,10 +18,10 @@ def derive_AES256_key(hex_key: str, context_info: bytes = b"QKD_File_Transfer") 
     """
     Derives a 32-byte AES key from the raw QKD hex string using HKDF.
     """
-    # 1. Convert hex to raw bytes (Input Key Material)
+    # Convert hex to raw bytes (Input Key Material)
     raw_key_material = bytes.fromhex(hex_key)
 
-    # 2. Setup HKDF
+    # Setup HKDF
     hkdf = HKDF(
         algorithm=hashes.SHA384(),
         length=32,                  # AES-256 requires 32 bytes
@@ -30,7 +30,7 @@ def derive_AES256_key(hex_key: str, context_info: bytes = b"QKD_File_Transfer") 
         backend=default_backend()
     )
 
-    # 3. Derive the specific session key
+    # erive the specific session key
     return hkdf.derive(raw_key_material)
 
 
@@ -50,12 +50,7 @@ def split_iv_tag_ciphertext(data_bytes: bytes):
 
 
 def encrypt_AES256(plaintext_bytes: bytes, hex_key: str) -> bytes:
-    # 1. Derive Key
     byte_key = derive_AES256_key(hex_key)
-
-    # 2. No Padding needed for GCM (it acts as a stream cipher)
-
-    # 3. Encrypt
     iv = secrets.token_bytes(IV_size)
 
     # Initialize GCM Cipher
@@ -76,14 +71,11 @@ def decrypt_AES256(encrypted_bytes: bytes, hex_key: str, mode="GCM") -> bytes:
     byte_key = derive_AES256_key(hex_key)
 
     try:
-        # 1. Split raw bytes into components
         iv, tag, ciphertext = split_iv_tag_ciphertext(encrypted_bytes)
 
-        # 2. Initialize GCM Cipher for Decryption
         cipher = Cipher(algorithms.AES(byte_key), modes.GCM(iv, tag), backend=default_backend())
         decryptor = cipher.decryptor()
 
-        # 3. Decrypt and Verify
         decrypted_data = decryptor.update(ciphertext) + decryptor.finalize()
 
         return decrypted_data
