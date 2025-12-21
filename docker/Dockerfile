@@ -26,10 +26,6 @@ RUN pip3 install requests python-dotenv cryptography pyenet flask
 
 WORKDIR /app
 
-# --- PATH FIX ---
-# Since context is Project Root:
-# 1. qkd-net is inside the 'docker' folder -> COPY docker/qkd-net ...
-# 2. src is in the root -> COPY src ...
 COPY ./docker/qkd-net /app/qkd-net
 COPY ./src /app/src
 

@@ -1,7 +1,6 @@
 version: '3.8'
 
 services:
-  # --- INFRASTRUCTURE (Redis & Directory) ---
   redis:
     image: redis:6-alpine
     container_name: redis
@@ -34,8 +33,6 @@ services:
       dockerfile: docker/Dockerfile
     container_name: node-a
     # COMMAND: Run the Proxy in background (&) then keep the container alive (or run QKD stack)
-    # Adjust '/start.sh' to whatever your original Dockerfile CMD was.
-    # If you don't have a start script, use: sh -c "python src/app/kms_proxy.py & tail -f /dev/null"
     volumes:
       - ./node-a/.qkd:/root/.qkd
       - ../src:/app/src
@@ -81,7 +78,6 @@ services:
       - ../src:/app/src
       - ../data:/app/data # Assuming you have data here
     environment:
-      # THE TRICK: Point KMS_URL to Node A's Proxy
       - KMS_URL=http://node-a:5000
       - DIRECTORY_SERVICE_URL=http://172.18.0.10:5000
     command: tail -f /dev/null # Keep alive and dont run proxy
@@ -101,7 +97,7 @@ services:
       - ../src:/app/src
       - ../received_data:/app/received_data
     environment:
-      # THE TRICK: Point KMS_URL to Node B's Proxy
+      # Point KMS_URL to Node B's Proxy
       - KMS_URL=http://node-b:5000
       - DIRECTORY_SERVICE_URL=http://172.18.0.10:5000
       - LISTEN_IP=0.0.0.0

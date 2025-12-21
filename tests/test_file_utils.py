@@ -49,7 +49,7 @@ def test_split_file_into_chunks(tmp_path):
 def test_split_file_not_found():
     """Verifies that the function handles missing files gracefully."""
     generator = split_file_into_chunks("non_existent_file.txt", 1024)
-    # Should yield nothing (empty list) or handle error
+
     chunks = list(generator)
     assert len(chunks) == 0
 

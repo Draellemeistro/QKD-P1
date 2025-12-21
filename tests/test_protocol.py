@@ -132,9 +132,7 @@ def test_malformed_header_format():
     # 'brokenheader' has no colon
     bad_packet = b"brokenheader|id:1\nData"
 
-    # Your implementation currently ignores bad parts or might handle them.
-    # Based on your code: `if ':' in part` it processes, else ignores.
-    # So this packet IS valid, but 'brokenheader' is skipped.
+
     headers, _ = decode_packet_with_headers(bad_packet)
 
     assert headers["id"] == 1

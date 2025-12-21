@@ -1,11 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, patch, call
-import requests
-from src.app.sender import ensure_valid_key, fetch_key_blocking, run_file_transfer
-
-
-# ... (Keep the existing fixtures and first 3 tests: test_fetch_key..., test_ensure_valid...) ...
-# START COPYING FROM HERE to overwrite the end of the file
+from src.app.sender import  run_file_transfer
 
 @pytest.fixture
 def mock_key_response():
@@ -24,7 +19,6 @@ def mock_transport():
         yield instance
 
 
-# (Include the other tests: test_fetch_key_blocking_retries_on_503, test_ensure_valid_key_over_soft_limit_success, test_ensure_valid_key_hard_limit_kms_down here if not already present)
 # ...
 
 @patch("src.app.sender.hash_file")
@@ -52,8 +46,6 @@ def test_run_file_transfer_flow(
 
     mock_encrypt.return_value = b"encrypted_bytes"
     mock_hash.return_value = "dummy_sha256"
-
-    # FIX: Return a valid ACK string that matches your protocol format (Key:Value|...)
     mock_transport.receive_packet.return_value = b'type:ACK|status:OK|message:Done\n'
 
     # 2. Run
@@ -63,6 +55,5 @@ def test_run_file_transfer_flow(
     mock_transport.connect.assert_called_with("1.2.3.4", 9999)
     assert mock_transport.send_reliable.call_count == 3
 
-    # FIX: Use assert_any_call because encrypt is called multiple times
     mock_encrypt.assert_any_call(b"chunk1", mock_key_response["hexKey"])
     mock_encrypt.assert_any_call(b"chunk2", mock_key_response["hexKey"])

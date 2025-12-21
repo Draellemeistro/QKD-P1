@@ -1,6 +1,6 @@
 import socket
 import struct
-import time
+
 
 
 class TcpTransport:
@@ -48,7 +48,6 @@ class TcpTransport:
         length_header = struct.pack('>I', len(data))
 
         # 2. Send Length + Data
-        # sendall ensures the OS buffer accepts everything before returning
         self.conn.sendall(length_header + data)
 
     def receive_packet(self):

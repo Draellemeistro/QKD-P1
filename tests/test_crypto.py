@@ -35,16 +35,12 @@ def test_derive_key_context_binding():
     Unit Test: Verifies that changing the HKDF 'info' context changes the key.
     This protects against cross-protocol attacks.
     """
-    # Assuming you added the optional 'context_info' parameter I suggested
-    # If not, you can remove this specific test.
-    try:
-        key_default = encryption.derive_AES256_key(VALID_HEX_KEY)
-        key_context_b = encryption.derive_AES256_key(VALID_HEX_KEY, context_info=b"DIFFERENT_CONTEXT")
 
-        assert key_default != key_context_b
-    except TypeError:
-        # Gracefully skip if function signature wasn't updated with optional arg
-        pytest.skip("derive_AES256_key does not accept context_info argument yet.")
+    key_default = encryption.derive_AES256_key(VALID_HEX_KEY)
+    key_context_b = encryption.derive_AES256_key(VALID_HEX_KEY, context_info=b"DIFFERENT_CONTEXT")
+
+    assert key_default != key_context_b
+
 
 
 def test_encrypt_decrypt_success():

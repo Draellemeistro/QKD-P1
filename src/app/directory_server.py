@@ -2,7 +2,7 @@ from flask import Flask, jsonify, request
 
 app = Flask(__name__)
 
-# In a real system, this would be a database
+# Fake database
 DIRECTORY = {
     "alice": {
         "ip": "172.18.0.3",
@@ -39,5 +39,4 @@ def health():
     return jsonify({"status": "running"}), 200
 
 if __name__ == '__main__':
-    # Listen on all interfaces
     app.run(host='0.0.0.0', port=5000)

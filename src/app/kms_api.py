@@ -23,7 +23,7 @@ endpoints = {
     "new_key": kms_server_ip + "/api/newkey",
 }
 
-# --- OPTIMIZATION: Persistent Session ---
+
 # Initializes a single TCP connection pool to reuse sockets (HTTP Keep-Alive)
 session = requests.Session()
 # ----------------------------------------
@@ -41,15 +41,14 @@ def new_key(receiver_id):
         blockId: Id of the block containing the key
     }
     """
-    # PROFILING START
+
     start_time = time.time()
     try:
-        # Use session.post instead of requests.post
         r = session.post(endpoints["new_key"], params={"siteid": str(receiver_id)})
         r.raise_for_status()  # Raise an error for bad responses (4xx and 5xx)
 
         duration = time.time() - start_time
-        # Log purely the network/KMS wait time
+        # Log  the network/KMS wait time
         print(f" [Profile] KMS HTTP Request took: {duration:.4f}s")
 
         return r.json()
@@ -57,7 +56,7 @@ def new_key(receiver_id):
     except Exception as e:
         print(f" [Profile] KMS Request FAILED after {time.time() - start_time:.4f}s")
         raise e
-    # PROFILING END
+
 
 
 def get_key(receiver_id, block_id, index):
@@ -82,14 +81,13 @@ def get_key(receiver_id, block_id, index):
     kms_url = endpoints["get_key"]
     params = {"siteid": str(receiver_id), "index": str(index), "blockid": str(block_id)}
 
-    # PROFILING START
+
     start_time = time.time()
     try:
-        # Use session.post instead of requests.post
         r = session.post(kms_url, params=params)
         r.raise_for_status()  # Raise an error for bad responses (4xx and 5xx)
         duration = time.time() - start_time
-        # Only log if it's slow (> 100ms) to avoid spamming console on Receiver
+        # Only log if it's slow (> 100ms)
         if duration > 0.1:
             print(f" [Profile] KMS GET Request took: {duration:.4f}s")
 
@@ -98,4 +96,3 @@ def get_key(receiver_id, block_id, index):
     except Exception as e:
         print(f" [Profile] KMS GET Request FAILED after {time.time() - start_time:.4f}s")
         raise e
-    # PROFILING END

@@ -3,7 +3,7 @@ import hashlib
 import mmap
 
 
-# --- 1. Reading (Generator Pattern) ---
+
 
 def split_file_into_chunks(file_path, chunk_size_bytes):
     """
@@ -29,7 +29,6 @@ def split_file_into_chunks(file_path, chunk_size_bytes):
         return
 
 
-# --- 2. Writing (Streaming Pattern) ---
 
 class FileStreamWriter:
     """
@@ -59,7 +58,6 @@ class FileStreamWriter:
             # self.file.flush() # Optional: slowing down but safer
 
 
-# --- 3. Verification ---
 
 def hash_file(file_path, hash_algorithm="sha256"):
     """

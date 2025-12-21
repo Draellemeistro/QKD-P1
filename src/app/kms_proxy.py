@@ -4,17 +4,12 @@ from src.app.kms_api import get_key, new_key
 import os
 import time
 
-# --- Constants & Config ---
 SERVER_PORT = 5000
 USERS = {"user": "pass"}
 DEFAULT_RECEIVER_ID = os.getenv("PEER_SITE_ID", "A")
 
 app = Flask(__name__)
 
-# ==========================================
-# KEY AVAILABILITY SIMULATION (Option A)
-# Smooth rate limiter (no burst buffer)
-# ==========================================
 
 # For 300 kbps with 256-bit keys: 300_000 / 256 = 1171.875 keys/s
 KEYS_PER_SEC = 20
@@ -39,9 +34,7 @@ def allow_key_now() -> bool:
     return False
 
 
-# ==========================================
-# HELPER FUNCTIONS
-# ==========================================
+
 
 def check_auth(username: Optional[str], password: Optional[str]) -> bool:
     if username is None or password is None:
@@ -49,26 +42,21 @@ def check_auth(username: Optional[str], password: Optional[str]) -> bool:
     return USERS.get(username) == password
 
 
-# ==========================================
-# ROUTES
-# ==========================================
 
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "online", "keys_per_sec": KEYS_PER_SEC})
 
 
-# 1. NEW KEY (Sender Requests) -> APPLY LIMIT HERE
+
 # Client sends: POST /api/newkey?siteid=B
 @app.route("/api/newkey", methods=["POST"])
 def serve_new_key():
-    # --- PHYSICS CHECK START (Smooth limiter) ---
     if not allow_key_now():
         return jsonify({
             "error": "Key Exhaustion",
             "detail": "Simulated QKD key-rate limit reached (smooth limiter)."
         }), 503
-    # --- PHYSICS CHECK END ---
 
     target_site = request.args.get("siteid") or DEFAULT_RECEIVER_ID
 
@@ -78,7 +66,6 @@ def serve_new_key():
         return jsonify({"error": str(e)}), 500
 
 
-# 2. GET KEY (Receiver Requests) -> USUALLY NO LIMIT
 # Client sends: POST /api/getkey?siteid=A&blockid=...&index=0
 @app.route("/api/getkey", methods=["POST"])
 def serve_get_key():
@@ -104,5 +91,4 @@ def serve_auth():
 
 
 if __name__ == "__main__":
-    # Avoid debug=True here: it can spawn a reloader process and break timing/state.
     app.run(host="0.0.0.0", port=SERVER_PORT, debug=False)

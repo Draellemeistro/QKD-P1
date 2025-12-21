@@ -7,7 +7,7 @@ def create_ack_packet(status="OK", message="Transfer Complete") -> bytes:
         "status": status,
         "message": message
     }
-    # We reuse the existing encoding logic
+
     return encode_packet_with_headers(headers, b"")
 
 def encode_packet_with_headers(headers: dict, data: bytes) -> bytes:

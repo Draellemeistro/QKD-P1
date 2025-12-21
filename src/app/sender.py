@@ -11,7 +11,7 @@ from src.app.transfer.protocol import create_data_packet, create_termination_pac
 # --- CONFIGURATION ---
 CHUNK_SIZE = 64 * 1024  # 64KB
 
-# Rotation policy (bytes)  ✅ FIXED UNITS
+# Rotation policy (bytes)
 KEY_ROTATION_SOFT_LIMIT = 10 * 1024 * 1024   # 10 MB
 KEY_ROTATION_HARD_LIMIT = 15 * 1024 * 1024   # 15 MB
 
@@ -35,12 +35,10 @@ def _timed_new_key(receiver_id, metrics):
         return key, (time.time() - t0)
     except requests.exceptions.HTTPError as e:
         dt = (time.time() - t0)
-        # Count 503 separately (other errors bubble up)
         if e.response is not None and e.response.status_code == 503:
             metrics["kms_http_503"] += 1
         raise
     finally:
-        # total time spent in HTTP attempts (success or fail)
         metrics["kms_http_time_s"] += (time.time() - t0)
 
 
@@ -121,7 +119,7 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
     file_hash = hash_file(file_path)
     print(f"File Hash (SHA-256): {file_hash}")
 
-    # --- PERFORMANCE TIMERS (application-side breakdown) ---
+    # --- PERFORMANCE TIMERS  ---
     t_key_fetch = 0.0       # time inside ensure_valid_key (includes local logic + sleep)
     t_encryption = 0.0
     t_network_send = 0.0
@@ -141,14 +139,12 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
         "kms_503_first_at_mb": None,
         "mb_sent_so_far": 0.0,
         "rotate_cooldown_until_ts": 0.0,
-        # NEW: raw HTTP attempt accounting
         "kms_http_attempts": 0,
         "kms_http_success": 0,
         "kms_http_503": 0,
         "kms_http_time_s": 0.0,
     }
 
-    # --- TRUE SECURITY METRICS (keys actually used to encrypt chunks) ---
     keys_used_set = set()            # unique (blockId, index) used in encryption
     key_bytes_usage = {}             # (blockId, index) -> bytes encrypted under that key
 
@@ -165,7 +161,6 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
 
     for chunk in split_file_into_chunks(file_path, CHUNK_SIZE):
         try:
-            # Update "so far" for 503-first-at logging
             metrics["mb_sent_so_far"] = total_bytes / 1024 / 1024
 
             # A. Key Management
@@ -183,7 +178,6 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
             )
             t_key_fetch += (time.time() - t0)
 
-            # Detect actual key change (init or rotation) - SUCCESSFUL changes only
             key_changed = (
                 old_block_id is None or
                 current_key_data["blockId"] != old_block_id or
@@ -245,11 +239,11 @@ def run_file_transfer(receiver_id, destination_ip, destination_port, file_path):
     total_duration = time.time() - start_time
     mb_sent = total_bytes / 1024 / 1024
 
-    # TRUE security metric: MB per UNIQUE key actually used
+
     unique_keys_used = max(len(keys_used_set), 1)
     effective_mb_per_key = mb_sent / unique_keys_used
 
-    # Extra: max bytes under any single key
+    #max bytes under any single key
     max_mb_under_one_key = 0.0
     if key_bytes_usage:
         max_mb_under_one_key = max(key_bytes_usage.values()) / 1024 / 1024

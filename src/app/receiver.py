@@ -118,7 +118,6 @@ def run_reception_loop(transport, output_file, receiver_id):
             except Exception as e:
                 print(f"Error decoding/processing packet: {e}")
 
-    # --- Verification & ACK ---
     print("Verifying integrity...")
     is_valid = validate_file_hash(output_file, received_hash)
 

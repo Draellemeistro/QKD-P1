@@ -6,9 +6,9 @@ import secrets
 
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
-# AES-GCM Standard Nonce (IV) size is 12 bytes
+# AES-GCM Standard Nonce (IV) size
 IV_size = 12
-# AES-GCM Standard Tag size is 16 bytes
+# AES-GCM Standard Tag size
 TAG_SIZE = 16
 
 
@@ -48,7 +48,6 @@ def split_iv_tag_ciphertext(data_bytes: bytes):
     return iv, tag, ciphertext
 
 
-# --- Main Encryption/Decryption ---
 
 def encrypt_AES256(plaintext_bytes: bytes, hex_key: str) -> bytes:
     # 1. Derive Key
@@ -81,16 +80,13 @@ def decrypt_AES256(encrypted_bytes: bytes, hex_key: str, mode="GCM") -> bytes:
         iv, tag, ciphertext = split_iv_tag_ciphertext(encrypted_bytes)
 
         # 2. Initialize GCM Cipher for Decryption
-        # We must pass the Tag here for verification
         cipher = Cipher(algorithms.AES(byte_key), modes.GCM(iv, tag), backend=default_backend())
         decryptor = cipher.decryptor()
 
         # 3. Decrypt and Verify
-        # finalize() will raise InvalidTag if the tag does not match
         decrypted_data = decryptor.update(ciphertext) + decryptor.finalize()
 
         return decrypted_data
 
     except InvalidTag:
-        # Raise ValueError to maintain compatibility with receiver.py's error handling
         raise ValueError("Decryption Error: Invalid Tag (Authentication Failed)")
